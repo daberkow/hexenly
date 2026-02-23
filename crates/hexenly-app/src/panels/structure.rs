@@ -44,7 +44,7 @@ pub fn show(
                     Grid::new(format!("structure_{}", region.id))
                         .num_columns(4)
                         .striped(true)
-                        .spacing([8.0, 2.0])
+                        .spacing([6.0, 2.0])
                         .show(ui, |ui| {
                             // Header row
                             ui.label(RichText::new("Field").strong());
@@ -56,9 +56,11 @@ pub fn show(
                             for field in &region.fields {
                                 let label_text = if let Some(fc) = &field.color {
                                     RichText::new(&field.label)
+                                        .font(monospace_font())
                                         .color(Color32::from_rgb(fc.r, fc.g, fc.b))
                                 } else {
                                     RichText::new(&field.label)
+                                        .font(monospace_font())
                                 };
                                 let field_label = ui.selectable_label(false, label_text);
                                 if field_label.clicked() {
