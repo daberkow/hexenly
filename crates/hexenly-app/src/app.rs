@@ -1,5 +1,5 @@
 use eframe::App;
-use egui::{CentralPanel, Context, Key, SidePanel, TopBottomPanel};
+use egui::{CentralPanel, Color32, Context, Key, RichText, SidePanel, TopBottomPanel};
 use hexenly_core::{HexFile, SearchPattern, Selection, find_all};
 use hexenly_templates::engine::{self, ResolveResult};
 use hexenly_templates::loader::TemplateRegistry;
@@ -36,6 +36,7 @@ pub struct HexenlyApp {
     search_hex_mode: bool,
     search_matches: Vec<usize>,
     search_match_idx: Option<usize>,
+    search_error: Option<String>,
 
     hex_view_state: HexViewState,
     theme_applied: bool,
@@ -108,6 +109,7 @@ impl HexenlyApp {
             search_hex_mode: false,
             search_matches: Vec::new(),
             search_match_idx: None,
+            search_error: None,
             hex_view_state: HexViewState::default(),
             theme_applied: false,
             pending_open: path,
@@ -208,11 +210,15 @@ impl HexenlyApp {
     }
 
     fn do_search(&mut self) {
+        self.search_error = None;
         let Some(file) = &self.file else { return };
         let pattern = if self.search_hex_mode {
             match SearchPattern::from_hex_string(&self.search_input) {
                 Some(p) => p,
-                None => return,
+                None => {
+                    self.search_error = Some("Invalid hex pattern".into());
+                    return;
+                }
             }
         } else {
             SearchPattern::from_text(&self.search_input)
@@ -350,6 +356,9 @@ impl HexenlyApp {
         ui.horizontal(|ui| {
             ui.label("Search:");
             let re = ui.text_edit_singleline(&mut self.search_input);
+            if re.changed() {
+                self.search_error = None;
+            }
             if self.focus_search {
                 re.request_focus();
                 self.focus_search = false;
@@ -373,6 +382,9 @@ impl HexenlyApp {
                     idx + 1,
                     self.search_matches.len()
                 ));
+            }
+            if let Some(err) = &self.search_error {
+                ui.label(RichText::new(err).color(Color32::from_rgb(220, 80, 80)));
             }
         });
     }
