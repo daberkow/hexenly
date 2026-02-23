@@ -28,6 +28,10 @@ impl Selection {
     pub fn len(&self) -> usize {
         self.end - self.start + 1
     }
+
+    pub fn is_empty(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone)]

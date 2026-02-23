@@ -43,12 +43,7 @@ pub fn find_next(data: &[u8], pattern: &SearchPattern, start: usize) -> Option<u
     }
     // Wrap around: search from beginning to start
     let wrap_end = start.min(data.len().saturating_sub(needle.len()));
-    for i in 0..=wrap_end {
-        if &data[i..i + needle.len()] == needle {
-            return Some(i);
-        }
-    }
-    None
+    (0..=wrap_end).find(|&i| &data[i..i + needle.len()] == needle)
 }
 
 pub fn find_prev(data: &[u8], pattern: &SearchPattern, start: usize) -> Option<usize> {
@@ -65,12 +60,7 @@ pub fn find_prev(data: &[u8], pattern: &SearchPattern, start: usize) -> Option<u
         }
     }
     // Wrap around: search backwards from end
-    for i in (start..=max_pos).rev() {
-        if &data[i..i + needle.len()] == needle {
-            return Some(i);
-        }
-    }
-    None
+    (start..=max_pos).rev().find(|&i| &data[i..i + needle.len()] == needle)
 }
 
 pub fn find_all(data: &[u8], pattern: &SearchPattern, limit: usize) -> Vec<usize> {

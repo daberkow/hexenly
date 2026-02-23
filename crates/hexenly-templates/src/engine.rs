@@ -152,10 +152,10 @@ fn format_bitflags_display(
     if let Some(val) = numeric_value {
         let mut names: Vec<(u8, &str)> = Vec::new();
         for (key, name) in bit_flags {
-            if let Ok(bit_idx) = key.parse::<u8>() {
-                if bit_idx < 64 && (val >> bit_idx) & 1 == 1 {
-                    names.push((bit_idx, name.as_str()));
-                }
+            if let Ok(bit_idx) = key.parse::<u8>()
+                && bit_idx < 64 && (val >> bit_idx) & 1 == 1
+            {
+                names.push((bit_idx, name.as_str()));
             }
         }
         if !names.is_empty() {

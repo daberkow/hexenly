@@ -13,8 +13,8 @@ pub struct HexFile {
 impl HexFile {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, HexError> {
         let path = path.as_ref().to_path_buf();
-        let file = File::open(&path).map_err(|e| HexError::Io(e))?;
-        let metadata = file.metadata().map_err(|e| HexError::Io(e))?;
+        let file = File::open(&path).map_err(HexError::Io)?;
+        let metadata = file.metadata().map_err(HexError::Io)?;
 
         if metadata.len() == 0 {
             return Err(HexError::EmptyFile);
@@ -22,7 +22,7 @@ impl HexFile {
 
         // SAFETY: We hold the file open and treat the mapping as read-only.
         // The file could be modified externally, which is a known limitation.
-        let mmap = unsafe { Mmap::map(&file) }.map_err(|e| HexError::Io(e))?;
+        let mmap = unsafe { Mmap::map(&file) }.map_err(HexError::Io)?;
 
         Ok(Self { mmap, path })
     }
@@ -55,7 +55,7 @@ impl HexFile {
 
     /// Number of rows for a given column count.
     pub fn row_count(&self, columns: usize) -> usize {
-        (self.mmap.len() + columns - 1) / columns
+        self.mmap.len().div_ceil(columns)
     }
 
     /// Read one row of bytes (may be shorter than `columns` for the last row).

@@ -263,14 +263,13 @@ impl HexenlyApp {
         } else {
             text.parse::<usize>().ok()
         };
-        if let Some(off) = offset {
-            if let Some(file) = &self.file {
-                if off < file.len() {
-                    self.cursor_offset = off;
-                    self.selection = None;
-                    self.scroll_to_cursor();
-                }
-            }
+        if let Some(off) = offset
+            && let Some(file) = &self.file
+            && off < file.len()
+        {
+            self.cursor_offset = off;
+            self.selection = None;
+            self.scroll_to_cursor();
         }
         self.show_goto = false;
         self.goto_input.clear();
@@ -453,21 +452,21 @@ impl App for HexenlyApp {
         });
 
         // Structure panel (above status bar)
-        if self.show_structure_panel {
-            if let Some(resolved) = &self.resolved_template {
-                let resolved_clone = resolved.clone();
-                let cursor = self.cursor_offset;
-                TopBottomPanel::bottom("structure")
-                    .default_height(200.0)
-                    .resizable(true)
-                    .show(ctx, |ui| {
-                        let action = structure::show(ui, &resolved_clone, cursor);
-                        if let Some(StructureAction::GoToOffset(off)) = action {
-                            self.cursor_offset = off;
-                            self.scroll_to_cursor();
-                        }
-                    });
-            }
+        if self.show_structure_panel
+            && let Some(resolved) = &self.resolved_template
+        {
+            let resolved_clone = resolved.clone();
+            let cursor = self.cursor_offset;
+            TopBottomPanel::bottom("structure")
+                .default_height(200.0)
+                .resizable(true)
+                .show(ctx, |ui| {
+                    let action = structure::show(ui, &resolved_clone, cursor);
+                    if let Some(StructureAction::GoToOffset(off)) = action {
+                        self.cursor_offset = off;
+                        self.scroll_to_cursor();
+                    }
+                });
         }
 
         // Left template browser panel
@@ -523,10 +522,10 @@ impl App for HexenlyApp {
                     &mut self.hex_view_state,
                     self.resolved_template.as_ref(),
                 );
-                if let Some(HexViewAction::SetCursor(off)) = action {
-                    if off < file.len() {
-                        self.cursor_offset = off;
-                    }
+                if let Some(HexViewAction::SetCursor(off)) = action
+                    && off < file.len()
+                {
+                    self.cursor_offset = off;
                 }
             } else {
                 ui.centered_and_justified(|ui| {

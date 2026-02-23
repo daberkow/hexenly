@@ -71,15 +71,15 @@ pub fn validate(template: &Template) -> Vec<ValidationWarning> {
         }
 
         // Validate color format
-        if let Some(color) = &region.color {
-            if TemplateColor::from_hex(color).is_none() {
-                warnings.push(ValidationWarning {
-                    message: format!(
-                        "invalid color '{}' in region '{}' (expected #RRGGBB)",
-                        color, region.id
-                    ),
-                });
-            }
+        if let Some(color) = &region.color
+            && TemplateColor::from_hex(color).is_none()
+        {
+            warnings.push(ValidationWarning {
+                message: format!(
+                    "invalid color '{}' in region '{}' (expected #RRGGBB)",
+                    color, region.id
+                ),
+            });
         }
     }
 
@@ -261,15 +261,15 @@ pub fn validate(template: &Template) -> Vec<ValidationWarning> {
             }
 
             // Check size_target references
-            if let Some(target) = &field.size_target {
-                if !all_ids.contains(target.as_str()) {
-                    warnings.push(ValidationWarning {
-                        message: format!(
-                            "field '{}': size_target references unknown ID '{}'",
-                            field.id, target
-                        ),
-                    });
-                }
+            if let Some(target) = &field.size_target
+                && !all_ids.contains(target.as_str())
+            {
+                warnings.push(ValidationWarning {
+                    message: format!(
+                        "field '{}': size_target references unknown ID '{}'",
+                        field.id, target
+                    ),
+                });
             }
 
             // Validate enum_values keys

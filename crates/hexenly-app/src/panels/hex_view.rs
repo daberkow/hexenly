@@ -4,19 +4,13 @@ use hexenly_templates::resolved::ResolvedTemplate;
 
 use crate::theme::{HexColors, annotation_font, monospace_font};
 
+#[derive(Default)]
 pub struct HexViewState {
     /// Scroll to this row on next frame, then clear.
     pub scroll_to_row: Option<usize>,
 }
 
-impl Default for HexViewState {
-    fn default() -> Self {
-        Self {
-            scroll_to_row: None,
-        }
-    }
-}
-
+#[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut Ui,
     file: &HexFile,
@@ -200,10 +194,10 @@ pub fn show(
             }
 
             // Handle clicks
-            if response.clicked() {
-                if let Some(pos) = response.interact_pointer_pos() {
-                    action = hit_test(pos, origin, offset_width, hex_col_width, columns, line_height, &row_range);
-                }
+            if response.clicked()
+                && let Some(pos) = response.interact_pointer_pos()
+            {
+                action = hit_test(pos, origin, offset_width, hex_col_width, columns, line_height, &row_range);
             }
         });
 
