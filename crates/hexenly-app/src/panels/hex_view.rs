@@ -1,4 +1,4 @@
-use egui::{Color32, Pos2, Rect, ScrollArea, Sense, Ui, Vec2};
+use egui::{Color32, Pos2, Rect, ScrollArea, Sense, Stroke, StrokeKind, Ui, Vec2};
 use hexenly_core::{ByteClass, HexFile, Selection, classify_byte};
 use hexenly_templates::resolved::ResolvedTemplate;
 
@@ -124,6 +124,7 @@ pub fn show(
 
                     if is_cursor {
                         painter.rect_filled(hex_rect, 0.0, HexColors::CURSOR_BG);
+                        painter.rect_stroke(hex_rect, 0.0, Stroke::new(1.0, HexColors::CURSOR_BORDER), StrokeKind::Inside);
                     } else if is_selected {
                         painter.rect_filled(hex_rect, 0.0, HexColors::SELECTION_BG);
                     } else if is_search_hit {
@@ -149,6 +150,7 @@ pub fn show(
                         );
                         if is_cursor {
                             painter.rect_filled(ascii_rect, 0.0, HexColors::CURSOR_BG);
+                            painter.rect_stroke(ascii_rect, 0.0, Stroke::new(1.0, HexColors::CURSOR_BORDER), StrokeKind::Inside);
                         } else if is_selected {
                             painter.rect_filled(ascii_rect, 0.0, HexColors::SELECTION_BG);
                         }

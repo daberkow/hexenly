@@ -11,7 +11,8 @@ impl HexColors {
     pub const SEARCH_HIGHLIGHT: Color32 = Color32::from_rgb(140, 120, 40);
     pub const OFFSET_COLUMN: Color32 = Color32::from_rgb(120, 140, 100);
     pub const ASCII_PANE: Color32 = Color32::from_rgb(170, 170, 140);
-    pub const CURSOR_BG: Color32 = Color32::from_rgb(80, 100, 150);
+    pub const CURSOR_BG: Color32 = Color32::from_rgb(96, 128, 192);
+    pub const CURSOR_BORDER: Color32 = Color32::from_rgb(140, 170, 220);
 }
 
 pub fn monospace_font() -> FontId {
