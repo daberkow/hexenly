@@ -53,10 +53,13 @@ pub fn show(
                             action = Some(BookmarkAction::Updated);
                         }
 
-                        let offset_text = format!("0x{bookmark_offset:08X}");
+                        let offset_text = match bookmarks[idx].end {
+                            Some(end) => format!("0x{bookmark_offset:08X}..0x{end:08X}"),
+                            None => format!("0x{bookmark_offset:08X}"),
+                        };
                         let offset_label = ui.add(
                             egui::Label::new(
-                                RichText::new(offset_text).monospace(),
+                                RichText::new(offset_text).monospace().small(),
                             )
                             .sense(egui::Sense::click()),
                         );

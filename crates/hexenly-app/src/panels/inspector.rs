@@ -1,4 +1,4 @@
-use egui::{Grid, RichText, Ui};
+use egui::{Grid, RichText, ScrollArea, Ui};
 use hexenly_core::{ByteInterpreter, HexFile};
 
 use crate::theme::monospace_font;
@@ -7,6 +7,9 @@ pub fn show(ui: &mut Ui, file: &HexFile, cursor: usize) {
     ui.heading("Inspector");
     ui.separator();
 
+    ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
     let Some(interp) = ByteInterpreter::interpret(file.as_bytes(), cursor) else {
         ui.label("No byte selected");
         return;
@@ -56,6 +59,7 @@ pub fn show(ui: &mut Ui, file: &HexFile, cursor: usize) {
         opt_row(ui, "f32", interp.f32_be.map(|v| format!("{v:.6e}")));
         opt_row(ui, "f64", interp.f64_be.map(|v| format!("{v:.6e}")));
     });
+    }); // ScrollArea
 }
 
 fn row(ui: &mut Ui, label: &str, value: &str) {

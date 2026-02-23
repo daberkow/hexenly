@@ -560,9 +560,14 @@ impl HexenlyApp {
 
         // Bookmark shortcuts
         if add_bookmark && self.file.is_some() {
+            let (offset, end) = match &self.selection {
+                Some(sel) => (sel.start, Some(sel.end)),
+                None => (self.cursor_offset, None),
+            };
             self.bookmarks.push(Bookmark {
                 name: format!("Bookmark {}", self.bookmarks.len() + 1),
-                offset: self.cursor_offset,
+                offset,
+                end,
                 note: String::new(),
             });
             self.bookmarks.sort_by_key(|b| b.offset);
@@ -921,9 +926,14 @@ impl App for HexenlyApp {
                         bookmarks::show(ui, &mut self.bookmarks, self.cursor_offset);
                     match action {
                         Some(BookmarkAction::Add) => {
+                            let (offset, end) = match &self.selection {
+                                Some(sel) => (sel.start, Some(sel.end)),
+                                None => (self.cursor_offset, None),
+                            };
                             self.bookmarks.push(Bookmark {
                                 name: format!("Bookmark {}", self.bookmarks.len() + 1),
-                                offset: self.cursor_offset,
+                                offset,
+                                end,
                                 note: String::new(),
                             });
                             self.bookmarks.sort_by_key(|b| b.offset);

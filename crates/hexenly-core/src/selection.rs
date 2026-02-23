@@ -40,6 +40,29 @@ use serde::{Deserialize, Serialize};
 pub struct Bookmark {
     pub name: String,
     pub offset: usize,
+    /// End of range (inclusive). If `None`, bookmark is a single offset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<usize>,
     #[serde(default)]
     pub note: String,
+}
+
+impl Bookmark {
+    pub fn len(&self) -> usize {
+        match self.end {
+            Some(end) => end - self.offset + 1,
+            None => 1,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        false // a bookmark always covers at least one byte
+    }
+
+    pub fn contains(&self, offset: usize) -> bool {
+        match self.end {
+            Some(end) => offset >= self.offset && offset <= end,
+            None => offset == self.offset,
+        }
+    }
 }
