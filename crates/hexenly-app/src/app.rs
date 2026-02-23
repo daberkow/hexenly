@@ -7,7 +7,7 @@ use hexenly_templates::engine::{self, ResolveResult};
 use hexenly_templates::loader::TemplateRegistry;
 use hexenly_templates::resolved::ResolvedTemplate;
 
-use crate::panels::hex_view::{self, HexViewAction, HexViewState};
+use crate::panels::hex_view::{self, HexPane, HexViewAction, HexViewState};
 use crate::panels::inspector;
 use crate::panels::structure::{self, StructureAction};
 use crate::panels::templates::{self, TemplateBrowserAction};
@@ -37,7 +37,10 @@ pub struct HexenlyApp {
     file: Option<HexFile>,
     cursor_offset: usize,
     selection: Option<Selection>,
+    selection_pane: HexPane,
+    pending_copy: bool,
     columns: usize,
+    auto_columns: bool,
     show_inspector: bool,
     show_ascii_pane: bool,
     text_encoding: TextEncoding,
@@ -121,7 +124,10 @@ impl HexenlyApp {
             file: None,
             cursor_offset: 0,
             selection: None,
+            selection_pane: HexPane::Hex,
+            pending_copy: false,
             columns: 16,
+            auto_columns: true,
             show_inspector: true,
             show_ascii_pane: true,
             text_encoding: TextEncoding::Ascii,
@@ -348,24 +354,68 @@ impl HexenlyApp {
     }
 
     fn handle_shortcuts(&mut self, ctx: &Context) {
-        ctx.input(|i| {
-            if i.key_pressed(Key::O) && i.modifiers.command {
-                self.open_file_dialog();
-            }
-            if i.key_pressed(Key::G) && i.modifiers.command {
-                self.show_goto = !self.show_goto;
-                self.show_search = false;
-            }
-            if i.key_pressed(Key::F) && i.modifiers.command {
-                self.show_search = !self.show_search;
-                self.focus_search = self.show_search;
-                self.show_goto = false;
-            }
-            if i.key_pressed(Key::Escape) {
-                self.show_goto = false;
-                self.show_search = false;
-            }
+        let (open, goto, find, escape, copy) = ctx.input_mut(|i| {
+            let open = i.consume_key(egui::Modifiers::COMMAND, Key::O);
+            let goto = i.consume_key(egui::Modifiers::COMMAND, Key::G);
+            let find = i.consume_key(egui::Modifiers::COMMAND, Key::F);
+            let escape = i.consume_key(egui::Modifiers::NONE, Key::Escape);
+            // eframe converts Ctrl+C into Event::Copy, not a key event
+            let copy = i.events.iter().any(|e| matches!(e, egui::Event::Copy));
+            (open, goto, find, escape, copy)
         });
+
+        if open {
+            self.open_file_dialog();
+        }
+        if goto {
+            self.show_goto = !self.show_goto;
+            self.show_search = false;
+        }
+        if find {
+            self.show_search = !self.show_search;
+            self.focus_search = self.show_search;
+            self.show_goto = false;
+        }
+        if escape {
+            self.show_goto = false;
+            self.show_search = false;
+        }
+        // copy is handled at end of update() so nothing overwrites the clipboard
+        if copy && self.selection.is_some() {
+            self.pending_copy = true;
+        }
+    }
+
+    fn selected_bytes(&self) -> Option<&[u8]> {
+        let sel = self.selection.as_ref()?;
+        let bytes = self.file.as_ref()?.as_bytes();
+        let start = sel.start.min(bytes.len());
+        let end = (sel.end + 1).min(bytes.len());
+        Some(&bytes[start..end])
+    }
+
+    fn copy_selection_hex(&self, ctx: &Context) {
+        let Some(selected) = self.selected_bytes() else { return };
+        let hex: Vec<String> = selected.iter().map(|b| format!("{b:02X}")).collect();
+        ctx.copy_text(hex.join(" "));
+    }
+
+    fn copy_selection_text(&self, ctx: &Context) {
+        let Some(selected) = self.selected_bytes() else { return };
+        let text = match self.text_encoding {
+            TextEncoding::Ascii => {
+                selected
+                    .iter()
+                    .map(|&b| {
+                        if (0x20..=0x7E).contains(&b) { b as char } else { '.' }
+                    })
+                    .collect::<String>()
+            }
+            TextEncoding::Utf8 => {
+                String::from_utf8_lossy(selected).into_owned()
+            }
+        };
+        ctx.copy_text(text);
     }
 
     fn show_toolbar(&mut self, ui: &mut egui::Ui) {
@@ -377,12 +427,19 @@ impl HexenlyApp {
             ui.separator();
 
             ui.label("Columns:");
+            if ui
+                .selectable_label(self.auto_columns, "Auto")
+                .clicked()
+            {
+                self.auto_columns = true;
+            }
             for &n in &[8, 16, 24, 32, 48] {
                 if ui
-                    .selectable_label(self.columns == n, format!("{n}"))
+                    .selectable_label(!self.auto_columns && self.columns == n, format!("{n}"))
                     .clicked()
                 {
                     self.columns = n;
+                    self.auto_columns = false;
                 }
             }
 
@@ -485,6 +542,12 @@ impl HexenlyApp {
                         ui.separator();
                     }
                     if let Some(sel) = &self.selection {
+                        if ui.small_button("Copy Text").clicked() {
+                            self.copy_selection_text(ui.ctx());
+                        }
+                        if ui.small_button("Copy Hex").clicked() {
+                            self.copy_selection_hex(ui.ctx());
+                        }
                         ui.label(format!("{} bytes", sel.len()));
                         ui.label(RichText::new("Selected:").weak());
                         ui.separator();
@@ -584,6 +647,24 @@ impl App for HexenlyApp {
 
         // Central hex view
         CentralPanel::default().show(ctx, |ui| {
+            // Auto-compute columns from available width
+            if self.auto_columns {
+                let font = crate::theme::monospace_font();
+                let char_width = ui.fonts_mut(|f| f.glyph_width(&font, '0'));
+                let available = ui.available_width();
+                let chars_available = (available / char_width) as usize;
+                let cols = if self.show_ascii_pane {
+                    // total_chars = 13 + 4*cols
+                    chars_available.saturating_sub(13) / 4
+                } else {
+                    // total_chars = 11 + 3*cols
+                    chars_available.saturating_sub(11) / 3
+                };
+                // Round down to nearest 8, clamp to [8, 128]
+                let cols = (cols / 8) * 8;
+                self.columns = cols.clamp(8, 128);
+            }
+
             if let Some(file) = &self.file {
                 let action = hex_view::show(
                     ui,
@@ -596,10 +677,20 @@ impl App for HexenlyApp {
                     &mut self.hex_view_state,
                     self.resolved_template.as_ref(),
                 );
-                if let Some(HexViewAction::SetCursor(off)) = action
-                    && off < file.len()
-                {
-                    self.cursor_offset = off;
+                match action {
+                    Some(HexViewAction::SetCursor(off)) if off < file.len() => {
+                        self.cursor_offset = off;
+                        self.selection = None;
+                    }
+                    Some(HexViewAction::Select { start, end, pane }) => {
+                        let max = file.len().saturating_sub(1);
+                        let s = start.min(max);
+                        let e = end.min(max);
+                        self.cursor_offset = e;
+                        self.selection = Some(Selection::new(s, e));
+                        self.selection_pane = pane;
+                    }
+                    _ => {}
                 }
             } else {
                 ui.centered_and_justified(|ui| {
@@ -609,6 +700,15 @@ impl App for HexenlyApp {
         });
 
         self.show_notifications(ctx);
+
+        // Handle copy at the very end so nothing overwrites ctx.copy_text()
+        if self.pending_copy {
+            self.pending_copy = false;
+            match self.selection_pane {
+                HexPane::Hex => self.copy_selection_hex(ctx),
+                HexPane::Ascii => self.copy_selection_text(ctx),
+            }
+        }
     }
 }
 

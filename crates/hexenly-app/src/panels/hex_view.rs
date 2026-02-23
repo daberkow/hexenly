@@ -8,6 +8,8 @@ use crate::theme::{HexColors, annotation_font, monospace_font};
 pub struct HexViewState {
     /// Scroll to this row on next frame, then clear.
     pub scroll_to_row: Option<usize>,
+    /// Byte offset and pane where the current drag started.
+    drag_start: Option<(usize, HexPane)>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -58,7 +60,7 @@ pub fn show(
                     total_row_width.max(ui.available_width()),
                     content_height.max(ui.available_height()),
                 ),
-                Sense::click(),
+                Sense::click_and_drag(),
             );
             let origin = response.rect.min;
 
@@ -195,11 +197,36 @@ pub fn show(
                 }
             }
 
-            // Handle clicks
+            let hit = |pos| {
+                pos_to_offset(
+                    pos, origin, offset_width, hex_col_width, char_width,
+                    hex_total_width, gap, columns, line_height, &row_range, show_ascii,
+                )
+            };
+
+            // Handle click (no drag) — set cursor, clear selection
             if response.clicked()
                 && let Some(pos) = response.interact_pointer_pos()
+                && let Some((offset, _pane)) = hit(pos)
             {
-                action = hit_test(pos, origin, offset_width, hex_col_width, columns, line_height, &row_range);
+                action = Some(HexViewAction::SetCursor(offset));
+            }
+
+            // Handle drag — select byte range
+            if response.drag_started()
+                && let Some(pos) = response.interact_pointer_pos()
+            {
+                state.drag_start = hit(pos);
+            }
+            if (response.dragged() || response.drag_stopped())
+                && let Some((start, pane)) = state.drag_start
+                && let Some(pos) = response.interact_pointer_pos()
+                && let Some((end, _)) = hit(pos)
+            {
+                action = Some(HexViewAction::Select { start, end, pane });
+            }
+            if response.drag_stopped() {
+                state.drag_start = None;
             }
         });
 
@@ -214,36 +241,56 @@ pub fn show(
     action
 }
 
-fn hit_test(
+/// Convert a screen position to a byte offset and which pane was hit.
+#[allow(clippy::too_many_arguments)]
+fn pos_to_offset(
     pos: Pos2,
     origin: Pos2,
     offset_width: f32,
     hex_col_width: f32,
+    char_width: f32,
+    hex_total_width: f32,
+    gap: f32,
     columns: usize,
     line_height: f32,
     row_range: &std::ops::Range<usize>,
-) -> Option<HexViewAction> {
-    let rel_x = pos.x - origin.x - offset_width;
+    show_ascii: bool,
+) -> Option<(usize, HexPane)> {
+    let rel_x = pos.x - origin.x;
     let rel_y = pos.y - origin.y;
 
-    if rel_x < 0.0 || rel_y < 0.0 {
+    if rel_y < 0.0 {
         return None;
     }
 
     let visual_row = (rel_y / line_height) as usize;
-    let col = (rel_x / hex_col_width) as usize;
-
-    if col >= columns {
-        return None;
-    }
-
     let row = row_range.start + visual_row;
     if row >= row_range.end {
         return None;
     }
 
-    let offset = row * columns + col;
-    Some(HexViewAction::SetCursor(offset))
+    // Check hex area
+    let hex_rel_x = rel_x - offset_width;
+    if hex_rel_x >= 0.0 && hex_rel_x < hex_total_width {
+        let col = (hex_rel_x / hex_col_width) as usize;
+        if col < columns {
+            return Some((row * columns + col, HexPane::Hex));
+        }
+    }
+
+    // Check ASCII area
+    if show_ascii {
+        let ascii_x_start = offset_width + hex_total_width + gap;
+        let ascii_rel_x = rel_x - ascii_x_start;
+        if ascii_rel_x >= 0.0 {
+            let col = (ascii_rel_x / char_width) as usize;
+            if col < columns {
+                return Some((row * columns + col, HexPane::Ascii));
+            }
+        }
+    }
+
+    None
 }
 
 fn byte_color(byte: u8) -> Color32 {
@@ -255,7 +302,14 @@ fn byte_color(byte: u8) -> Color32 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HexPane {
+    Hex,
+    Ascii,
+}
+
 #[derive(Debug)]
 pub enum HexViewAction {
     SetCursor(usize),
+    Select { start: usize, end: usize, pane: HexPane },
 }
