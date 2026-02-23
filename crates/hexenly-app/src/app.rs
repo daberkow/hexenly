@@ -1,5 +1,5 @@
 use eframe::App;
-use egui::{CentralPanel, Color32, Context, Key, RichText, SidePanel, TopBottomPanel};
+use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TopBottomPanel};
 use hexenly_core::{HexFile, SearchPattern, Selection, find_all};
 use hexenly_templates::engine::{self, ResolveResult};
 use hexenly_templates::loader::TemplateRegistry;
@@ -414,22 +414,23 @@ impl HexenlyApp {
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| "unknown".into());
-                ui.label(&name);
-                ui.separator();
-                ui.label(format_size(file.len()));
-                ui.separator();
-                ui.label(format!(
-                    "Offset: 0x{:08X} ({})",
-                    self.cursor_offset, self.cursor_offset
-                ));
-                if let Some(sel) = &self.selection {
-                    ui.separator();
-                    ui.label(format!("Selected: {} bytes", sel.len()));
-                }
-                if let Some(resolved) = &self.resolved_template {
-                    ui.separator();
-                    ui.label(format!("Template: {}", resolved.name));
-                }
+                ui.label(RichText::new(&name).strong());
+                ui.label(RichText::new(format_size(file.len())).weak());
+
+                ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                    if let Some(resolved) = &self.resolved_template {
+                        ui.label(&resolved.name);
+                        ui.label(RichText::new("Template:").weak());
+                        ui.separator();
+                    }
+                    if let Some(sel) = &self.selection {
+                        ui.label(format!("{} bytes", sel.len()));
+                        ui.label(RichText::new("Selected:").weak());
+                        ui.separator();
+                    }
+                    ui.label(format!("0x{:08X} ({})", self.cursor_offset, self.cursor_offset));
+                    ui.label(RichText::new("Offset:").weak());
+                });
             } else {
                 ui.label("No file open \u{2014} Ctrl+O to open");
             }
