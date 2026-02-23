@@ -34,8 +34,12 @@ impl Selection {
     }
 }
 
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bookmark {
     pub name: String,
     pub offset: usize,
+    #[serde(default)]
+    pub note: String,
 }

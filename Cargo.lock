@@ -1462,6 +1462,8 @@ dependencies = [
  "hexenly-core",
  "hexenly-templates",
  "rfd",
+ "serde",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1471,6 +1473,7 @@ name = "hexenly-core"
 version = "0.1.0"
 dependencies = [
  "memmap2",
+ "serde",
  "thiserror 2.0.18",
 ]
 

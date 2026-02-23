@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use eframe::App;
 use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TopBottomPanel};
-use hexenly_core::{HexFile, SearchPattern, Selection, find_all};
+use hexenly_core::{Bookmark, HexFile, SearchPattern, Selection, find_all};
 use hexenly_templates::engine::{self, ResolveResult};
 use hexenly_templates::loader::TemplateRegistry;
 use hexenly_templates::resolved::ResolvedTemplate;
@@ -73,6 +73,9 @@ pub struct HexenlyApp {
     resolved_template: Option<ResolvedTemplate>,
     template_filter: String,
     notifications: Vec<Notification>,
+
+    // Bookmarks
+    bookmarks: Vec<Bookmark>,
 }
 
 impl HexenlyApp {
@@ -152,6 +155,7 @@ impl HexenlyApp {
             resolved_template: None,
             template_filter: String::new(),
             notifications,
+            bookmarks: Vec::new(),
         }
     }
 
@@ -171,6 +175,7 @@ impl HexenlyApp {
                 self.search_match_idx = None;
                 self.active_template_index = None;
                 self.resolved_template = None;
+                self.bookmarks = load_bookmarks(path);
 
                 // Auto-detect template
                 self.auto_detect_template(path);
@@ -940,6 +945,47 @@ impl App for HexenlyApp {
                 HexPane::Ascii => self.copy_selection_text(ctx),
             }
         }
+    }
+}
+
+fn bookmarks_sidecar_path(file_path: &std::path::Path) -> Option<std::path::PathBuf> {
+    let dir = file_path.parent()?;
+    let name = file_path.file_name()?.to_str()?;
+    Some(dir.join(format!(".{name}.hexenly.json")))
+}
+
+fn load_bookmarks(file_path: &std::path::Path) -> Vec<Bookmark> {
+    let Some(sidecar) = bookmarks_sidecar_path(file_path) else {
+        return vec![];
+    };
+    let Ok(content) = std::fs::read_to_string(&sidecar) else {
+        return vec![];
+    };
+
+    #[derive(serde::Deserialize)]
+    struct Sidecar {
+        bookmarks: Vec<Bookmark>,
+    }
+
+    serde_json::from_str::<Sidecar>(&content)
+        .map(|s| s.bookmarks)
+        .unwrap_or_default()
+}
+
+#[allow(dead_code)] // Used in Task 4: Bookmarks sidebar panel UI
+fn save_bookmarks(file_path: &std::path::Path, bookmarks: &[Bookmark]) {
+    let Some(sidecar) = bookmarks_sidecar_path(file_path) else {
+        return;
+    };
+
+    #[derive(serde::Serialize)]
+    struct Sidecar<'a> {
+        bookmarks: &'a [Bookmark],
+    }
+
+    let json = serde_json::to_string_pretty(&Sidecar { bookmarks }).unwrap_or_default();
+    if let Err(e) = std::fs::write(&sidecar, json) {
+        tracing::error!("Failed to save bookmarks: {e}");
     }
 }
 
