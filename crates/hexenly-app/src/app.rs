@@ -453,13 +453,16 @@ impl HexenlyApp {
             ctrl_end: bool,
         }
 
-        let (open, goto, find, escape, copy, nav, shift_nav) = ctx.input_mut(|i| {
+        let (open, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark) = ctx.input_mut(|i| {
             let open = i.consume_key(egui::Modifiers::COMMAND, Key::O);
             let goto = i.consume_key(egui::Modifiers::COMMAND, Key::G);
             let find = i.consume_key(egui::Modifiers::COMMAND, Key::F);
             let escape = i.consume_key(egui::Modifiers::NONE, Key::Escape);
             // eframe converts Ctrl+C into Event::Copy, not a key event
             let copy = i.events.iter().any(|e| matches!(e, egui::Event::Copy));
+
+            // Ctrl+B to add bookmark
+            let add_bookmark = i.consume_key(egui::Modifiers::COMMAND, Key::B);
 
             // Ctrl+Home/End must be consumed before plain Home/End
             let ctrl_home = i.consume_key(egui::Modifiers::COMMAND, Key::Home);
@@ -473,6 +476,18 @@ impl HexenlyApp {
             let shift_ctrl_end = i.consume_key(
                 egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
                 Key::End,
+            );
+
+            // Ctrl+Shift+Up/Down for bookmark navigation — must be consumed
+            // BEFORE Shift+Up/Down to prevent the simpler modifier match
+            // from swallowing it.
+            let prev_bookmark = i.consume_key(
+                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+                Key::ArrowUp,
+            );
+            let next_bookmark = i.consume_key(
+                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+                Key::ArrowDown,
             );
 
             let left = i.consume_key(egui::Modifiers::NONE, Key::ArrowLeft);
@@ -519,7 +534,7 @@ impl HexenlyApp {
                 ctrl_end: shift_ctrl_end,
             };
 
-            (open, goto, find, escape, copy, nav, shift_nav)
+            (open, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark)
         });
 
         if open {
@@ -541,6 +556,32 @@ impl HexenlyApp {
         // copy is handled at end of update() so nothing overwrites the clipboard
         if copy && self.selection.is_some() {
             self.pending_copy = true;
+        }
+
+        // Bookmark shortcuts
+        if add_bookmark && self.file.is_some() {
+            self.bookmarks.push(Bookmark {
+                name: format!("Bookmark {}", self.bookmarks.len() + 1),
+                offset: self.cursor_offset,
+                note: String::new(),
+            });
+            self.bookmarks.sort_by_key(|b| b.offset);
+            if let Some(file) = &self.file {
+                save_bookmarks(file.path(), &self.bookmarks);
+            }
+            self.show_bookmarks = true;
+        }
+        if prev_bookmark
+            && let Some(bm) = self.bookmarks.iter().rev().find(|b| b.offset < self.cursor_offset)
+        {
+            let off = bm.offset;
+            self.set_cursor_abs(off);
+        }
+        if next_bookmark
+            && let Some(bm) = self.bookmarks.iter().find(|b| b.offset > self.cursor_offset)
+        {
+            let off = bm.offset;
+            self.set_cursor_abs(off);
         }
 
         // Keyboard navigation (only when a file is open)
