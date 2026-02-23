@@ -1,0 +1,143 @@
+name = "BMP"
+description = "Windows Bitmap image format"
+extensions = ["bmp", "dib"]
+magic = "424D"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "file_header"
+label = "File Header"
+color = "#E67E22"
+offset = 0
+length = 14
+group = "header"
+description = "BMP file header (BITMAPFILEHEADER)"
+
+[[regions.fields]]
+id = "signature"
+label = "Signature"
+field_type = "ascii"
+length = 2
+role = "magic"
+description = "BM"
+
+[[regions.fields]]
+id = "file_size"
+label = "File Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Total file size in bytes"
+
+[[regions.fields]]
+id = "reserved1"
+label = "Reserved 1"
+field_type = "u16_le"
+length = 2
+role = "reserved"
+
+[[regions.fields]]
+id = "reserved2"
+label = "Reserved 2"
+field_type = "u16_le"
+length = 2
+role = "reserved"
+
+[[regions.fields]]
+id = "pixel_offset"
+label = "Pixel Data Offset"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Offset to start of pixel data"
+
+[[regions]]
+id = "dib_header"
+label = "DIB Header"
+color = "#9B59B6"
+offset = 14
+length = 40
+group = "header"
+description = "BITMAPINFOHEADER (40 bytes)"
+
+[[regions.fields]]
+id = "dib_size"
+label = "Header Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of this header (40)"
+
+[[regions.fields]]
+id = "width"
+label = "Width"
+field_type = "i32_le"
+length = 4
+description = "Image width in pixels"
+
+[[regions.fields]]
+id = "height"
+label = "Height"
+field_type = "i32_le"
+length = 4
+description = "Image height in pixels (negative = top-down)"
+
+[[regions.fields]]
+id = "planes"
+label = "Color Planes"
+field_type = "u16_le"
+length = 2
+description = "Number of color planes (always 1)"
+
+[[regions.fields]]
+id = "bpp"
+label = "Bits Per Pixel"
+field_type = "u16_le"
+length = 2
+description = "1, 4, 8, 16, 24, or 32"
+
+[[regions.fields]]
+id = "compression"
+label = "Compression"
+field_type = "u32_le"
+length = 4
+description = "0=none, 1=RLE8, 2=RLE4, 3=bitfields"
+
+[[regions.fields]]
+id = "image_size"
+label = "Image Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of raw bitmap data (may be 0 for uncompressed)"
+
+[[regions.fields]]
+id = "x_ppm"
+label = "X Pixels/Meter"
+field_type = "i32_le"
+length = 4
+description = "Horizontal resolution"
+
+[[regions.fields]]
+id = "y_ppm"
+label = "Y Pixels/Meter"
+field_type = "i32_le"
+length = 4
+description = "Vertical resolution"
+
+[[regions.fields]]
+id = "colors_used"
+label = "Colors Used"
+field_type = "u32_le"
+length = 4
+role = "count"
+description = "Number of palette colors (0 = default)"
+
+[[regions.fields]]
+id = "colors_important"
+label = "Important Colors"
+field_type = "u32_le"
+length = 4
+role = "count"
+description = "Number of important colors (0 = all)"

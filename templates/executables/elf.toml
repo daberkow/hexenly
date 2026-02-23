@@ -1,0 +1,168 @@
+name = "ELF"
+description = "Executable and Linkable Format (64-bit)"
+extensions = ["elf", "so", "o", "out"]
+magic = "7F454C46"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "ident"
+label = "ELF Identification"
+color = "#E74C3C"
+offset = 0
+length = 16
+group = "header"
+description = "ELF magic number and identification bytes"
+
+[[regions.fields]]
+id = "magic"
+label = "Magic"
+field_type = "bytes"
+length = 4
+role = "magic"
+description = "7F 45 4C 46 (.ELF)"
+
+[[regions.fields]]
+id = "class"
+label = "Class"
+field_type = "u8"
+length = 1
+description = "1=32-bit, 2=64-bit"
+
+[[regions.fields]]
+id = "data"
+label = "Data Encoding"
+field_type = "u8"
+length = 1
+description = "1=little-endian, 2=big-endian"
+
+[[regions.fields]]
+id = "version_ident"
+label = "ELF Version"
+field_type = "u8"
+length = 1
+role = "version"
+description = "ELF version (always 1)"
+
+[[regions.fields]]
+id = "osabi"
+label = "OS/ABI"
+field_type = "u8"
+length = 1
+description = "Target OS ABI"
+
+[[regions.fields]]
+id = "abi_version"
+label = "ABI Version"
+field_type = "u8"
+length = 1
+role = "version"
+
+[[regions.fields]]
+id = "padding"
+label = "Padding"
+field_type = "bytes"
+length = 7
+role = "padding"
+
+[[regions]]
+id = "header"
+label = "ELF Header"
+color = "#3498DB"
+offset = 16
+length = 48
+group = "header"
+description = "ELF 64-bit header fields"
+
+[[regions.fields]]
+id = "e_type"
+label = "Object Type"
+field_type = "u16_le"
+length = 2
+description = "1=relocatable, 2=executable, 3=shared, 4=core"
+
+[[regions.fields]]
+id = "e_machine"
+label = "Machine"
+field_type = "u16_le"
+length = 2
+description = "Target architecture (0x3E=x86-64)"
+
+[[regions.fields]]
+id = "e_version"
+label = "Version"
+field_type = "u32_le"
+length = 4
+role = "version"
+
+[[regions.fields]]
+id = "e_entry"
+label = "Entry Point"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "Virtual address of entry point"
+
+[[regions.fields]]
+id = "e_phoff"
+label = "Program Header Offset"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "File offset of program header table"
+
+[[regions.fields]]
+id = "e_shoff"
+label = "Section Header Offset"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "File offset of section header table"
+
+[[regions.fields]]
+id = "e_flags"
+label = "Flags"
+field_type = "u32_le"
+length = 4
+
+[[regions.fields]]
+id = "e_ehsize"
+label = "ELF Header Size"
+field_type = "u16_le"
+length = 2
+role = "size"
+
+[[regions.fields]]
+id = "e_phentsize"
+label = "PH Entry Size"
+field_type = "u16_le"
+length = 2
+role = "size"
+
+[[regions.fields]]
+id = "e_phnum"
+label = "PH Entry Count"
+field_type = "u16_le"
+length = 2
+role = "count"
+
+[[regions.fields]]
+id = "e_shentsize"
+label = "SH Entry Size"
+field_type = "u16_le"
+length = 2
+role = "size"
+
+[[regions.fields]]
+id = "e_shnum"
+label = "SH Entry Count"
+field_type = "u16_le"
+length = 2
+role = "count"
+
+[[regions.fields]]
+id = "e_shstrndx"
+label = "SH String Index"
+field_type = "u16_le"
+length = 2
+role = "count"

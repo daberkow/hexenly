@@ -1,0 +1,94 @@
+name = "ZIP"
+description = "ZIP archive local file header"
+extensions = ["zip", "jar", "apk", "docx", "xlsx", "pptx"]
+magic = "504B0304"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "local_header"
+label = "Local File Header"
+color = "#2ECC71"
+offset = 0
+length = 30
+group = "header"
+description = "ZIP local file header (fixed portion)"
+
+[[regions.fields]]
+id = "signature"
+label = "Signature"
+field_type = "bytes"
+length = 4
+role = "magic"
+description = "50 4B 03 04 (PK\\x03\\x04)"
+
+[[regions.fields]]
+id = "version_needed"
+label = "Version Needed"
+field_type = "u16_le"
+length = 2
+role = "version"
+description = "Minimum version needed to extract"
+
+[[regions.fields]]
+id = "flags"
+label = "General Flags"
+field_type = "u16_le"
+length = 2
+description = "Bit flags (encryption, compression options)"
+
+[[regions.fields]]
+id = "compression"
+label = "Compression Method"
+field_type = "u16_le"
+length = 2
+description = "0=stored, 8=deflated"
+
+[[regions.fields]]
+id = "mod_time"
+label = "Last Mod Time"
+field_type = "u16_le"
+length = 2
+description = "MS-DOS time format"
+
+[[regions.fields]]
+id = "mod_date"
+label = "Last Mod Date"
+field_type = "u16_le"
+length = 2
+description = "MS-DOS date format"
+
+[[regions.fields]]
+id = "crc32"
+label = "CRC-32"
+field_type = "u32_le"
+length = 4
+role = "checksum"
+
+[[regions.fields]]
+id = "compressed_size"
+label = "Compressed Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+
+[[regions.fields]]
+id = "uncompressed_size"
+label = "Uncompressed Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+
+[[regions.fields]]
+id = "filename_length"
+label = "Filename Length"
+field_type = "u16_le"
+length = 2
+role = "size"
+
+[[regions.fields]]
+id = "extra_length"
+label = "Extra Field Length"
+field_type = "u16_le"
+length = 2
+role = "size"

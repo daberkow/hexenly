@@ -1,0 +1,97 @@
+name = "PNG"
+description = "Portable Network Graphics image format"
+extensions = ["png"]
+magic = "89504E470D0A1A0A"
+magic_offset = 0
+endian = "big"
+
+[[regions]]
+id = "signature"
+label = "PNG Signature"
+color = "#4A90D9"
+offset = 0
+length = 8
+group = "header"
+description = "8-byte PNG magic signature"
+
+[[regions.fields]]
+id = "magic"
+label = "Magic"
+field_type = "bytes"
+length = 8
+role = "magic"
+description = "89 50 4E 47 0D 0A 1A 0A"
+
+[[regions]]
+id = "ihdr"
+label = "IHDR Chunk"
+color = "#50C878"
+offset = 8
+length = 25
+group = "header"
+description = "Image header chunk with dimensions and color info"
+
+[[regions.fields]]
+id = "ihdr_length"
+label = "Chunk Length"
+field_type = "u32_be"
+length = 4
+role = "size"
+description = "Length of chunk data (always 13 for IHDR)"
+
+[[regions.fields]]
+id = "ihdr_type"
+label = "Chunk Type"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "IHDR"
+
+[[regions.fields]]
+id = "width"
+label = "Width"
+field_type = "u32_be"
+length = 4
+description = "Image width in pixels"
+
+[[regions.fields]]
+id = "height"
+label = "Height"
+field_type = "u32_be"
+length = 4
+description = "Image height in pixels"
+
+[[regions.fields]]
+id = "bit_depth"
+label = "Bit Depth"
+field_type = "u8"
+length = 1
+description = "Bits per sample: 1, 2, 4, 8, or 16"
+
+[[regions.fields]]
+id = "color_type"
+label = "Color Type"
+field_type = "u8"
+length = 1
+description = "0=gray, 2=RGB, 3=indexed, 4=gray+alpha, 6=RGBA"
+
+[[regions.fields]]
+id = "compression"
+label = "Compression"
+field_type = "u8"
+length = 1
+description = "Compression method (always 0 = deflate)"
+
+[[regions.fields]]
+id = "filter"
+label = "Filter"
+field_type = "u8"
+length = 1
+description = "Filter method (always 0)"
+
+[[regions.fields]]
+id = "interlace"
+label = "Interlace"
+field_type = "u8"
+length = 1
+description = "0=none, 1=Adam7"
