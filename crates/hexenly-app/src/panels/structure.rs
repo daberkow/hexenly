@@ -54,7 +54,13 @@ pub fn show(
                             ui.end_row();
 
                             for field in &region.fields {
-                                let field_label = ui.selectable_label(false, &field.label);
+                                let label_text = if let Some(fc) = &field.color {
+                                    RichText::new(&field.label)
+                                        .color(Color32::from_rgb(fc.r, fc.g, fc.b))
+                                } else {
+                                    RichText::new(&field.label)
+                                };
+                                let field_label = ui.selectable_label(false, label_text);
                                 if field_label.clicked() {
                                     action = Some(StructureAction::GoToOffset(field.offset as usize));
                                 }
@@ -62,10 +68,14 @@ pub fn show(
                                     field_label.on_hover_text(desc);
                                 }
 
-                                ui.label(
+                                let offset_label = ui.selectable_label(
+                                    false,
                                     RichText::new(format!("0x{:X}", field.offset))
                                         .font(monospace_font()),
                                 );
+                                if offset_label.clicked() {
+                                    action = Some(StructureAction::GoToOffset(field.offset as usize));
+                                }
                                 ui.label(
                                     RichText::new(field.length.to_string())
                                         .font(monospace_font()),

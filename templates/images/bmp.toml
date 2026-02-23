@@ -104,6 +104,14 @@ field_type = "u32_le"
 length = 4
 description = "0=none, 1=RLE8, 2=RLE4, 3=bitfields"
 
+[regions.fields.enum_values]
+"0" = "None (BI_RGB)"
+"1" = "RLE8"
+"2" = "RLE4"
+"3" = "Bitfields"
+"4" = "JPEG"
+"5" = "PNG"
+
 [[regions.fields]]
 id = "image_size"
 label = "Image Size"

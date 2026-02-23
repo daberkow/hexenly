@@ -31,6 +31,7 @@ pub struct HexenlyApp {
 
     // Search state
     show_search: bool,
+    focus_search: bool,
     search_input: String,
     search_hex_mode: bool,
     search_matches: Vec<usize>,
@@ -76,6 +77,16 @@ impl HexenlyApp {
             "ZIP",
             include_str!("../../../templates/archives/zip.toml"),
         );
+        registry.load_builtin(
+            "filesystems",
+            "ISO 9660",
+            include_str!("../../../templates/filesystems/iso9660.toml"),
+        );
+        registry.load_builtin(
+            "filesystems",
+            "FAT32",
+            include_str!("../../../templates/filesystems/fat32.toml"),
+        );
 
         for (name, err) in &registry.load_errors {
             tracing::error!("Failed to load template {name}: {err}");
@@ -92,6 +103,7 @@ impl HexenlyApp {
             show_goto: false,
             goto_input: String::new(),
             show_search: false,
+            focus_search: false,
             search_input: String::new(),
             search_hex_mode: false,
             search_matches: Vec::new(),
@@ -229,6 +241,20 @@ impl HexenlyApp {
         self.scroll_to_cursor();
     }
 
+    fn search_prev(&mut self) {
+        if self.search_matches.is_empty() {
+            return;
+        }
+        let len = self.search_matches.len();
+        let idx = self
+            .search_match_idx
+            .map(|i| (i + len - 1) % len)
+            .unwrap_or(len - 1);
+        self.search_match_idx = Some(idx);
+        self.cursor_offset = self.search_matches[idx];
+        self.scroll_to_cursor();
+    }
+
     fn goto_offset(&mut self) {
         let text = self.goto_input.trim();
         let offset = if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X"))
@@ -266,6 +292,7 @@ impl HexenlyApp {
             }
             if i.key_pressed(Key::F) && i.modifiers.command {
                 self.show_search = !self.show_search;
+                self.focus_search = self.show_search;
                 self.show_goto = false;
             }
             if i.key_pressed(Key::Escape) {
@@ -284,7 +311,7 @@ impl HexenlyApp {
             ui.separator();
 
             ui.label("Columns:");
-            for &n in &[8, 16, 24, 32] {
+            for &n in &[8, 16, 24, 32, 48] {
                 if ui
                     .selectable_label(self.columns == n, format!("{n}"))
                     .clicked()
@@ -324,12 +351,19 @@ impl HexenlyApp {
         ui.horizontal(|ui| {
             ui.label("Search:");
             let re = ui.text_edit_singleline(&mut self.search_input);
+            if self.focus_search {
+                re.request_focus();
+                self.focus_search = false;
+            }
             if re.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                 self.do_search();
             }
             ui.toggle_value(&mut self.search_hex_mode, "Hex");
             if ui.button("Find").clicked() {
                 self.do_search();
+            }
+            if ui.button("Prev").clicked() {
+                self.search_prev();
             }
             if ui.button("Next").clicked() {
                 self.search_next();

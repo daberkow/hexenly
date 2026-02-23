@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +33,65 @@ pub struct Region {
     #[serde(default)]
     pub description: Option<String>,
     pub fields: Vec<Field>,
+    #[serde(default)]
+    pub repeat: Option<RepeatMode>,
+    /// Condition to evaluate — region is skipped if false
+    #[serde(default)]
+    pub condition: Option<ConditionExpr>,
+    /// Field ID whose numeric value gives the repeat count (for `RepeatMode::Count`)
+    #[serde(default)]
+    pub repeat_count: Option<String>,
+    /// Hex byte string sentinel to stop repeating (for `RepeatMode::UntilMagic`)
+    #[serde(default)]
+    pub repeat_until: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RepeatMode {
+    Count,
+    UntilEof,
+    UntilMagic,
+}
+
+/// Binary arithmetic expression: `left op right`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArithExpr {
+    pub left: Operand,
+    pub op: ArithOp,
+    pub right: Operand,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Operand {
+    Literal(u64),
+    FieldRef(String),
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+/// Condition expression: `field_id op value`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConditionExpr {
+    pub field_id: String,
+    pub op: CompareOp,
+    pub value: u64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CompareOp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,14 +109,28 @@ pub struct Field {
     /// ID of another field whose value gives the size of this field
     #[serde(default)]
     pub size_target: Option<String>,
+    /// Condition to evaluate — field is skipped if false
+    #[serde(default)]
+    pub condition: Option<ConditionExpr>,
+    /// Map of numeric value → display label (e.g. "8" → "Deflated")
+    #[serde(default)]
+    pub enum_values: Option<HashMap<String, String>>,
+    /// Map of bit index → flag name (e.g. "0" → "Encrypted")
+    #[serde(default)]
+    pub bit_flags: Option<HashMap<String, String>>,
+    /// Optional color as #RRGGBB hex string — overrides region color in hex view
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
-/// Offset expression: integer for absolute, "after:id" for AfterField, "from:id" for FromField.
+/// Offset expression: integer for absolute, "after:id" for AfterField, "from:id" for FromField,
+/// "expr:a * b" for arithmetic.
 #[derive(Debug, Clone, Serialize)]
 pub enum OffsetExpr {
     Absolute(u64),
     AfterField(String),
     FromField(String),
+    Expr(ArithExpr),
 }
 
 impl<'de> Deserialize<'de> for OffsetExpr {
@@ -70,6 +145,8 @@ impl<'de> Deserialize<'de> for OffsetExpr {
                     Ok(OffsetExpr::AfterField(id.to_string()))
                 } else if let Some(id) = s.strip_prefix("from:") {
                     Ok(OffsetExpr::FromField(id.to_string()))
+                } else if let Some(body) = s.strip_prefix("expr:") {
+                    parse_arith_expr(body).map(OffsetExpr::Expr).map_err(serde::de::Error::custom)
                 } else {
                     Err(serde::de::Error::custom(format!(
                         "invalid offset expression: {s}"
@@ -81,12 +158,14 @@ impl<'de> Deserialize<'de> for OffsetExpr {
     }
 }
 
-/// Length expression: integer for fixed, "to_end" for ToEnd, "from:id" for FromField.
+/// Length expression: integer for fixed, "to_end" for ToEnd, "from:id" for FromField,
+/// "expr:a * b" for arithmetic.
 #[derive(Debug, Clone, Serialize)]
 pub enum LengthExpr {
     Fixed(u64),
     FromField(String),
     ToEnd,
+    Expr(ArithExpr),
 }
 
 impl<'de> Deserialize<'de> for LengthExpr {
@@ -99,6 +178,8 @@ impl<'de> Deserialize<'de> for LengthExpr {
                     Ok(LengthExpr::ToEnd)
                 } else if let Some(id) = s.strip_prefix("from:") {
                     Ok(LengthExpr::FromField(id.to_string()))
+                } else if let Some(body) = s.strip_prefix("expr:") {
+                    parse_arith_expr(body).map(LengthExpr::Expr).map_err(serde::de::Error::custom)
                 } else {
                     Err(serde::de::Error::custom(format!(
                         "invalid length expression: {s}"
@@ -171,4 +252,81 @@ pub enum FieldRole {
     Padding,
     Reserved,
     Data,
+}
+
+/// Parse an operand: integer literal (decimal or 0x hex) or field ID string.
+fn parse_operand(s: &str) -> Result<Operand, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("empty operand".into());
+    }
+    // Try hex literal
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        return u64::from_str_radix(hex, 16)
+            .map(Operand::Literal)
+            .map_err(|e| format!("invalid hex literal '{s}': {e}"));
+    }
+    // Try decimal literal (starts with digit)
+    if s.bytes().next().is_some_and(|b| b.is_ascii_digit()) {
+        return s
+            .parse::<u64>()
+            .map(Operand::Literal)
+            .map_err(|e| format!("invalid integer literal '{s}': {e}"));
+    }
+    // Otherwise it's a field reference
+    Ok(Operand::FieldRef(s.to_string()))
+}
+
+/// Parse an arithmetic expression like `"field_a * 2048"` or `"field + field_b"`.
+/// Operators must be space-delimited: ` + `, ` - `, ` * `, ` / `.
+fn parse_arith_expr(s: &str) -> Result<ArithExpr, String> {
+    let s = s.trim();
+    // Try each operator (space-delimited to avoid ambiguity with field names containing `-`)
+    for (token, op) in [(" * ", ArithOp::Mul), (" / ", ArithOp::Div), (" + ", ArithOp::Add), (" - ", ArithOp::Sub)] {
+        if let Some(pos) = s.find(token) {
+            let left = &s[..pos];
+            let right = &s[pos + token.len()..];
+            return Ok(ArithExpr {
+                left: parse_operand(left)?,
+                op,
+                right: parse_operand(right)?,
+            });
+        }
+    }
+    Err(format!("no space-delimited operator found in expression: '{s}'"))
+}
+
+/// Custom deserialize for ConditionExpr from strings like `"color_type == 3"` or `"version >= 0x02"`.
+impl<'de> Deserialize<'de> for ConditionExpr {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        parse_condition_expr(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+fn parse_condition_expr(s: &str) -> Result<ConditionExpr, String> {
+    // Try operators longest-first to avoid `<` matching before `<=`
+    for (token, op) in [
+        (" <= ", CompareOp::Le),
+        (" >= ", CompareOp::Ge),
+        (" != ", CompareOp::Ne),
+        (" == ", CompareOp::Eq),
+        (" < ", CompareOp::Lt),
+        (" > ", CompareOp::Gt),
+    ] {
+        if let Some(pos) = s.find(token) {
+            let field_id = s[..pos].trim().to_string();
+            let value_str = s[pos + token.len()..].trim();
+            let value = if let Some(hex) = value_str.strip_prefix("0x").or_else(|| value_str.strip_prefix("0X")) {
+                u64::from_str_radix(hex, 16)
+                    .map_err(|e| format!("invalid hex value '{value_str}': {e}"))?
+            } else {
+                value_str
+                    .parse::<u64>()
+                    .map_err(|e| format!("invalid integer value '{value_str}': {e}"))?
+            };
+            return Ok(ConditionExpr { field_id, op, value });
+        }
+    }
+    Err(format!("no comparison operator found in condition: '{s}'"))
 }

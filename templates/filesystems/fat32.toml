@@ -1,0 +1,285 @@
+name = "FAT32"
+description = "FAT32 boot sector (BPB) and FSInfo structure"
+extensions = ["img", "vhd", "raw"]
+magic = "EB"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "boot_sector"
+label = "Boot Sector (BPB)"
+color = "#2ECC71"
+offset = 0
+length = 90
+group = "bpb"
+description = "BIOS Parameter Block — FAT32 boot sector"
+
+[[regions.fields]]
+id = "jump_boot"
+label = "Jump Instruction"
+field_type = "bytes"
+length = 3
+role = "magic"
+description = "x86 jump instruction (EB xx 90 or E9 xx xx)"
+
+[[regions.fields]]
+id = "oem_name"
+label = "OEM Name"
+field_type = "ascii"
+length = 8
+description = "OEM identifier (e.g. 'MSDOS5.0')"
+
+[[regions.fields]]
+id = "bytes_per_sector"
+label = "Bytes Per Sector"
+field_type = "u16_le"
+length = 2
+role = "size"
+description = "Usually 512"
+
+[[regions.fields]]
+id = "sectors_per_cluster"
+label = "Sectors Per Cluster"
+field_type = "u8"
+length = 1
+description = "Must be a power of 2"
+
+[[regions.fields]]
+id = "reserved_sectors"
+label = "Reserved Sectors"
+field_type = "u16_le"
+length = 2
+role = "count"
+description = "Number of reserved sectors (usually 32)"
+
+[[regions.fields]]
+id = "num_fats"
+label = "Number of FATs"
+field_type = "u8"
+length = 1
+role = "count"
+description = "Usually 2"
+
+[[regions.fields]]
+id = "root_entry_count"
+label = "Root Entry Count"
+field_type = "u16_le"
+length = 2
+description = "Must be 0 for FAT32"
+
+[[regions.fields]]
+id = "total_sectors_16"
+label = "Total Sectors (16-bit)"
+field_type = "u16_le"
+length = 2
+description = "Must be 0 for FAT32"
+
+[[regions.fields]]
+id = "media_type"
+label = "Media Type"
+field_type = "u8"
+length = 1
+description = "0xF8 = fixed disk, 0xF0 = removable"
+
+[regions.fields.enum_values]
+"240" = "Removable"
+"248" = "Fixed Disk"
+
+[[regions.fields]]
+id = "fat_size_16"
+label = "FAT Size (16-bit)"
+field_type = "u16_le"
+length = 2
+description = "Must be 0 for FAT32"
+
+[[regions.fields]]
+id = "sectors_per_track"
+label = "Sectors Per Track"
+field_type = "u16_le"
+length = 2
+
+[[regions.fields]]
+id = "num_heads"
+label = "Number of Heads"
+field_type = "u16_le"
+length = 2
+
+[[regions.fields]]
+id = "hidden_sectors"
+label = "Hidden Sectors"
+field_type = "u32_le"
+length = 4
+description = "Sectors before this partition"
+
+[[regions.fields]]
+id = "total_sectors_32"
+label = "Total Sectors (32-bit)"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Total number of sectors on the volume"
+
+[[regions.fields]]
+id = "fat_size_32"
+label = "FAT Size (32-bit)"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Sectors per FAT"
+
+[[regions.fields]]
+id = "ext_flags"
+label = "Extended Flags"
+field_type = "u16_le"
+length = 2
+description = "FAT mirroring flags"
+
+[[regions.fields]]
+id = "fs_version"
+label = "FS Version"
+field_type = "u16_le"
+length = 2
+role = "version"
+description = "FAT32 version (0.0)"
+
+[[regions.fields]]
+id = "root_cluster"
+label = "Root Cluster"
+field_type = "u32_le"
+length = 4
+description = "First cluster of root directory (usually 2)"
+
+[[regions.fields]]
+id = "fs_info_sector"
+label = "FSInfo Sector"
+field_type = "u16_le"
+length = 2
+role = "offset"
+description = "Sector number of FSInfo structure (usually 1)"
+
+[[regions.fields]]
+id = "backup_boot_sector"
+label = "Backup Boot Sector"
+field_type = "u16_le"
+length = 2
+description = "Sector number of backup boot sector (usually 6)"
+
+[[regions.fields]]
+id = "reserved_fat32"
+label = "Reserved"
+field_type = "bytes"
+length = 12
+role = "reserved"
+
+[[regions]]
+id = "boot_ext"
+label = "Extended Boot Record"
+color = "#3498DB"
+offset = 90
+length = 26
+group = "bpb"
+description = "Extended BIOS Parameter Block fields"
+
+[[regions.fields]]
+id = "drive_number"
+label = "Drive Number"
+field_type = "u8"
+length = 1
+description = "0x80 for hard disk"
+
+[[regions.fields]]
+id = "reserved_nt"
+label = "Reserved (NT)"
+field_type = "u8"
+length = 1
+role = "reserved"
+
+[[regions.fields]]
+id = "boot_sig"
+label = "Boot Signature"
+field_type = "u8"
+length = 1
+description = "0x29 indicates following fields are present"
+
+[[regions.fields]]
+id = "volume_serial"
+label = "Volume Serial Number"
+field_type = "u32_le"
+length = 4
+description = "Random serial number"
+
+[[regions.fields]]
+id = "volume_label"
+label = "Volume Label"
+field_type = "ascii"
+length = 11
+description = "Volume label (padded with spaces)"
+
+[[regions.fields]]
+id = "fs_type"
+label = "FS Type"
+field_type = "ascii"
+length = 8
+description = "Always 'FAT32   '"
+
+[[regions]]
+id = "fsinfo"
+label = "FSInfo Structure"
+color = "#E67E22"
+offset = 512
+length = 512
+group = "fsinfo"
+description = "File System Information Structure (sector 1)"
+
+[[regions.fields]]
+id = "fsinfo_sig1"
+label = "Lead Signature"
+field_type = "u32_le"
+length = 4
+role = "magic"
+description = "0x41615252 ('RRaA')"
+
+[[regions.fields]]
+id = "fsinfo_reserved1"
+label = "Reserved"
+field_type = "bytes"
+length = 480
+role = "reserved"
+
+[[regions.fields]]
+id = "fsinfo_sig2"
+label = "Structure Signature"
+field_type = "u32_le"
+length = 4
+role = "magic"
+description = "0x61417272 ('rrAa')"
+
+[[regions.fields]]
+id = "free_clusters"
+label = "Free Cluster Count"
+field_type = "u32_le"
+length = 4
+role = "count"
+description = "Last known free cluster count (0xFFFFFFFF if unknown)"
+
+[[regions.fields]]
+id = "next_free_cluster"
+label = "Next Free Cluster"
+field_type = "u32_le"
+length = 4
+description = "Hint for next free cluster allocation"
+
+[[regions.fields]]
+id = "fsinfo_reserved2"
+label = "Reserved"
+field_type = "bytes"
+length = 12
+role = "reserved"
+
+[[regions.fields]]
+id = "fsinfo_sig3"
+label = "Trail Signature"
+field_type = "u32_le"
+length = 4
+role = "magic"
+description = "0xAA550000"

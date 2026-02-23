@@ -81,4 +81,6 @@ pub struct ResolvedField {
     pub description: Option<String>,
     pub raw_bytes: Vec<u8>,
     pub display_value: String,
+    /// Optional per-field color — overrides region color in hex view.
+    pub color: Option<TemplateColor>,
 }

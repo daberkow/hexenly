@@ -1,0 +1,244 @@
+name = "ISO 9660"
+description = "ISO 9660 Primary Volume Descriptor (sector 16)"
+extensions = ["iso"]
+magic = "4344303031"
+magic_offset = 32769
+endian = "big"
+
+[[regions]]
+id = "pvd_type"
+label = "Volume Descriptor Header"
+color = "#2ECC71"
+offset = 32768
+length = 7
+group = "pvd"
+description = "Type code and standard identifier"
+
+[[regions.fields]]
+id = "type_code"
+label = "Type Code"
+field_type = "u8"
+length = 1
+description = "1 = Primary Volume Descriptor"
+
+[regions.fields.enum_values]
+"0" = "Boot Record"
+"1" = "Primary Volume Descriptor"
+"2" = "Supplementary Volume Descriptor"
+"3" = "Volume Partition Descriptor"
+"255" = "Volume Descriptor Set Terminator"
+
+[[regions.fields]]
+id = "standard_id"
+label = "Standard Identifier"
+field_type = "ascii"
+length = 5
+role = "magic"
+description = "Always 'CD001'"
+
+[[regions.fields]]
+id = "version"
+label = "Version"
+field_type = "u8"
+length = 1
+role = "version"
+description = "Always 1"
+
+[[regions]]
+id = "pvd_system"
+label = "System & Volume Identifiers"
+color = "#3498DB"
+offset = 32775
+length = 97
+group = "pvd"
+description = "System and volume identification strings"
+
+[[regions.fields]]
+id = "unused1"
+label = "Unused Field"
+field_type = "bytes"
+length = 1
+role = "reserved"
+
+[[regions.fields]]
+id = "system_id"
+label = "System Identifier"
+field_type = "ascii"
+length = 32
+description = "System that can act on sectors 0-15"
+
+[[regions.fields]]
+id = "volume_id"
+label = "Volume Identifier"
+field_type = "ascii"
+length = 32
+description = "Identification of this volume"
+
+[[regions.fields]]
+id = "unused2"
+label = "Unused Field"
+field_type = "bytes"
+length = 8
+role = "reserved"
+
+[[regions.fields]]
+id = "volume_space_size_le"
+label = "Volume Space Size (LE)"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Number of logical blocks (little-endian)"
+
+[[regions.fields]]
+id = "volume_space_size_be"
+label = "Volume Space Size (BE)"
+field_type = "u32_be"
+length = 4
+role = "size"
+description = "Number of logical blocks (big-endian)"
+
+[[regions.fields]]
+id = "unused3"
+label = "Unused Field"
+field_type = "bytes"
+length = 8
+role = "reserved"
+
+[[regions.fields]]
+id = "volume_set_size"
+label = "Volume Set Size"
+field_type = "bytes"
+length = 4
+description = "Both-endian volume set size"
+
+[[regions.fields]]
+id = "volume_seq_number"
+label = "Volume Sequence Number"
+field_type = "bytes"
+length = 4
+description = "Both-endian volume sequence number"
+
+[[regions]]
+id = "pvd_block"
+label = "Block Size & Path Table"
+color = "#E67E22"
+offset = 32896
+length = 46
+group = "pvd"
+description = "Logical block size and path table information"
+
+[[regions.fields]]
+id = "logical_block_size_le"
+label = "Logical Block Size (LE)"
+field_type = "u16_le"
+length = 2
+role = "size"
+description = "Logical block size in bytes (little-endian)"
+
+[[regions.fields]]
+id = "logical_block_size_be"
+label = "Logical Block Size (BE)"
+field_type = "u16_be"
+length = 2
+role = "size"
+description = "Logical block size in bytes (big-endian)"
+
+[[regions.fields]]
+id = "path_table_size_le"
+label = "Path Table Size (LE)"
+field_type = "u32_le"
+length = 4
+role = "size"
+
+[[regions.fields]]
+id = "path_table_size_be"
+label = "Path Table Size (BE)"
+field_type = "u32_be"
+length = 4
+role = "size"
+
+[[regions.fields]]
+id = "path_table_l_loc"
+label = "L Path Table Location"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "LBA of the little-endian path table"
+
+[[regions.fields]]
+id = "path_table_l_opt"
+label = "Optional L Path Table"
+field_type = "u32_le"
+length = 4
+role = "offset"
+
+[[regions.fields]]
+id = "path_table_m_loc"
+label = "M Path Table Location"
+field_type = "u32_be"
+length = 4
+role = "offset"
+description = "LBA of the big-endian path table"
+
+[[regions.fields]]
+id = "path_table_m_opt"
+label = "Optional M Path Table"
+field_type = "u32_be"
+length = 4
+role = "offset"
+
+[[regions.fields]]
+id = "root_dir_record"
+label = "Root Directory Record"
+field_type = "bytes"
+length = 34
+description = "Embedded root directory entry"
+
+[[regions]]
+id = "pvd_strings"
+label = "Volume Descriptor Strings"
+color = "#9B59B6"
+offset = 32942
+length = 486
+group = "pvd"
+description = "Volume set, publisher, preparer, and application identifiers"
+
+[[regions.fields]]
+id = "volume_set_id"
+label = "Volume Set Identifier"
+field_type = "ascii"
+length = 128
+
+[[regions.fields]]
+id = "publisher_id"
+label = "Publisher Identifier"
+field_type = "ascii"
+length = 128
+
+[[regions.fields]]
+id = "preparer_id"
+label = "Data Preparer Identifier"
+field_type = "ascii"
+length = 128
+
+[[regions.fields]]
+id = "application_id"
+label = "Application Identifier"
+field_type = "ascii"
+length = 128
+
+[[regions]]
+id = "path_table_l"
+label = "L Path Table"
+color = "#E74C3C"
+offset = "expr:path_table_l_loc * logical_block_size_le"
+length = "from:path_table_size_le"
+group = "path_table"
+description = "Little-endian path table (offset computed from LBA * block size)"
+
+[[regions.fields]]
+id = "path_table_l_data"
+label = "Path Table Data"
+field_type = "bytes"
+length = "from:path_table_size_le"
+role = "data"

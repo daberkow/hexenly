@@ -53,21 +53,16 @@ pub fn show(
 
     let scroll_to = state.scroll_to_row.take();
 
-    ScrollArea::vertical()
+    ui.spacing_mut().item_spacing.y = 0.0;
+
+    let output = ScrollArea::vertical()
         .auto_shrink([false, false])
         .show_rows(ui, line_height, row_count, |ui, row_range| {
-            // If we need to scroll to a specific row, do it next frame via the scroll area
-            if let Some(target_row) = scroll_to {
-                if !row_range.contains(&target_row) {
-                    // We'll handle this by setting scroll_to_row again so it keeps trying
-                }
-                let _ = target_row; // handled by show_rows offset
-            }
-
+            let content_height = (row_range.end - row_range.start) as f32 * line_height;
             let (response, painter) = ui.allocate_painter(
                 Vec2::new(
                     total_row_width.max(ui.available_width()),
-                    (row_range.end - row_range.start) as f32 * line_height,
+                    content_height.max(ui.available_height()),
                 ),
                 Sense::click(),
             );
@@ -103,7 +98,12 @@ pub fn show(
                     if let Some(tmpl) = template_overlay {
                         for region in &tmpl.regions {
                             if region.contains(byte_offset as u64) {
-                                let c = &region.color;
+                                // Use field color if the byte falls in a field with a color,
+                                // otherwise fall back to region color.
+                                let c = region.fields.iter()
+                                    .find(|f| byte_offset as u64 >= f.offset && (byte_offset as u64) < f.offset + f.length)
+                                    .and_then(|f| f.color.as_ref())
+                                    .unwrap_or(&region.color);
                                 let bg = Color32::from_rgba_unmultiplied(c.r, c.g, c.b, 38);
                                 painter.rect_filled(hex_rect, 0.0, bg);
 
@@ -208,8 +208,11 @@ pub fn show(
         });
 
     if let Some(target_row) = scroll_to {
-        // Couldn't scroll within show_rows, re-request for next frame
-        state.scroll_to_row = Some(target_row);
+        let target_y = target_row as f32 * line_height;
+        let mut scroll_state = output.state;
+        scroll_state.offset.y = target_y;
+        scroll_state.store(ui.ctx(), output.id);
+        ui.ctx().request_repaint();
     }
 
     action

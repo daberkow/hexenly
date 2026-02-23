@@ -1,18 +1,19 @@
 name = "ZIP"
-description = "ZIP archive local file header"
+description = "ZIP archive — local file entries"
 extensions = ["zip", "jar", "apk", "docx", "xlsx", "pptx"]
 magic = "504B0304"
 magic_offset = 0
 endian = "little"
 
 [[regions]]
-id = "local_header"
-label = "Local File Header"
+id = "local_entry"
+label = "Local File Entry"
 color = "#2ECC71"
 offset = 0
-length = 30
-group = "header"
-description = "ZIP local file header (fixed portion)"
+group = "entry"
+description = "One local file entry (header + filename + extra + data)"
+repeat = "until_magic"
+repeat_until = "504B0102"
 
 [[regions.fields]]
 id = "signature"
@@ -20,6 +21,7 @@ label = "Signature"
 field_type = "bytes"
 length = 4
 role = "magic"
+color = "#2ECC71"
 description = "50 4B 03 04 (PK\\x03\\x04)"
 
 [[regions.fields]]
@@ -28,6 +30,7 @@ label = "Version Needed"
 field_type = "u16_le"
 length = 2
 role = "version"
+color = "#2ECC71"
 description = "Minimum version needed to extract"
 
 [[regions.fields]]
@@ -35,20 +38,44 @@ id = "flags"
 label = "General Flags"
 field_type = "u16_le"
 length = 2
+color = "#2ECC71"
 description = "Bit flags (encryption, compression options)"
+
+[regions.fields.bit_flags]
+"0" = "Encrypted"
+"1" = "Compression Option 1"
+"2" = "Compression Option 2"
+"3" = "Data Descriptor"
+"5" = "Compressed Patched"
+"6" = "Strong Encryption"
+"11" = "Language Encoding (UTF-8)"
+"13" = "Encrypted Central Dir"
 
 [[regions.fields]]
 id = "compression"
 label = "Compression Method"
 field_type = "u16_le"
 length = 2
+color = "#2ECC71"
 description = "0=stored, 8=deflated"
+
+[regions.fields.enum_values]
+"0" = "Stored"
+"1" = "Shrunk"
+"6" = "Imploded"
+"8" = "Deflated"
+"9" = "Deflate64"
+"12" = "BZIP2"
+"14" = "LZMA"
+"93" = "Zstandard"
+"95" = "XZ"
 
 [[regions.fields]]
 id = "mod_time"
 label = "Last Mod Time"
 field_type = "u16_le"
 length = 2
+color = "#2ECC71"
 description = "MS-DOS time format"
 
 [[regions.fields]]
@@ -56,6 +83,7 @@ id = "mod_date"
 label = "Last Mod Date"
 field_type = "u16_le"
 length = 2
+color = "#2ECC71"
 description = "MS-DOS date format"
 
 [[regions.fields]]
@@ -64,6 +92,7 @@ label = "CRC-32"
 field_type = "u32_le"
 length = 4
 role = "checksum"
+color = "#2ECC71"
 
 [[regions.fields]]
 id = "compressed_size"
@@ -71,6 +100,7 @@ label = "Compressed Size"
 field_type = "u32_le"
 length = 4
 role = "size"
+color = "#2ECC71"
 
 [[regions.fields]]
 id = "uncompressed_size"
@@ -78,6 +108,7 @@ label = "Uncompressed Size"
 field_type = "u32_le"
 length = 4
 role = "size"
+color = "#2ECC71"
 
 [[regions.fields]]
 id = "filename_length"
@@ -85,6 +116,7 @@ label = "Filename Length"
 field_type = "u16_le"
 length = 2
 role = "size"
+color = "#2ECC71"
 
 [[regions.fields]]
 id = "extra_length"
@@ -92,3 +124,26 @@ label = "Extra Field Length"
 field_type = "u16_le"
 length = 2
 role = "size"
+color = "#2ECC71"
+
+[[regions.fields]]
+id = "filename_data"
+label = "Filename"
+field_type = "utf8"
+length = "from:filename_length"
+color = "#3498DB"
+
+[[regions.fields]]
+id = "extra_data"
+label = "Extra Data"
+field_type = "bytes"
+length = "from:extra_length"
+color = "#9B59B6"
+
+[[regions.fields]]
+id = "file_data"
+label = "File Data"
+field_type = "bytes"
+length = "from:compressed_size"
+role = "data"
+color = "#E67E22"

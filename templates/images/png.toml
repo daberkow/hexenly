@@ -75,12 +75,22 @@ field_type = "u8"
 length = 1
 description = "0=gray, 2=RGB, 3=indexed, 4=gray+alpha, 6=RGBA"
 
+[regions.fields.enum_values]
+"0" = "Grayscale"
+"2" = "RGB"
+"3" = "Indexed"
+"4" = "Grayscale + Alpha"
+"6" = "RGBA"
+
 [[regions.fields]]
 id = "compression"
 label = "Compression"
 field_type = "u8"
 length = 1
 description = "Compression method (always 0 = deflate)"
+
+[regions.fields.enum_values]
+"0" = "Deflate"
 
 [[regions.fields]]
 id = "filter"
@@ -95,3 +105,7 @@ label = "Interlace"
 field_type = "u8"
 length = 1
 description = "0=none, 1=Adam7"
+
+[regions.fields.enum_values]
+"0" = "None"
+"1" = "Adam7"

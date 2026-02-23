@@ -29,12 +29,22 @@ field_type = "u8"
 length = 1
 description = "1=32-bit, 2=64-bit"
 
+[regions.fields.enum_values]
+"0" = "None"
+"1" = "32-bit"
+"2" = "64-bit"
+
 [[regions.fields]]
 id = "data"
 label = "Data Encoding"
 field_type = "u8"
 length = 1
 description = "1=little-endian, 2=big-endian"
+
+[regions.fields.enum_values]
+"0" = "None"
+"1" = "Little Endian"
+"2" = "Big Endian"
 
 [[regions.fields]]
 id = "version_ident"
@@ -50,6 +60,13 @@ label = "OS/ABI"
 field_type = "u8"
 length = 1
 description = "Target OS ABI"
+
+[regions.fields.enum_values]
+"0" = "System V"
+"3" = "Linux"
+"6" = "Solaris"
+"9" = "FreeBSD"
+"12" = "OpenBSD"
 
 [[regions.fields]]
 id = "abi_version"
@@ -81,12 +98,30 @@ field_type = "u16_le"
 length = 2
 description = "1=relocatable, 2=executable, 3=shared, 4=core"
 
+[regions.fields.enum_values]
+"0" = "None"
+"1" = "Relocatable"
+"2" = "Executable"
+"3" = "Shared Object"
+"4" = "Core"
+
 [[regions.fields]]
 id = "e_machine"
 label = "Machine"
 field_type = "u16_le"
 length = 2
 description = "Target architecture (0x3E=x86-64)"
+
+[regions.fields.enum_values]
+"0" = "None"
+"3" = "x86"
+"8" = "MIPS"
+"20" = "PowerPC"
+"40" = "ARM"
+"43" = "SPARC v9"
+"62" = "x86-64"
+"183" = "AArch64"
+"243" = "RISC-V"
 
 [[regions.fields]]
 id = "e_version"
