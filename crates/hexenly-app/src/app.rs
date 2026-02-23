@@ -7,6 +7,7 @@ use hexenly_templates::engine::{self, ResolveResult};
 use hexenly_templates::loader::TemplateRegistry;
 use hexenly_templates::resolved::ResolvedTemplate;
 
+use crate::panels::bookmarks::{self, BookmarkAction};
 use crate::panels::hex_view::{self, HexPane, HexViewAction, HexViewState};
 use crate::panels::inspector;
 use crate::panels::structure::{self, StructureAction};
@@ -75,6 +76,7 @@ pub struct HexenlyApp {
     notifications: Vec<Notification>,
 
     // Bookmarks
+    show_bookmarks: bool,
     bookmarks: Vec<Bookmark>,
 }
 
@@ -155,6 +157,7 @@ impl HexenlyApp {
             resolved_template: None,
             template_filter: String::new(),
             notifications,
+            show_bookmarks: false,
             bookmarks: Vec::new(),
         }
     }
@@ -699,6 +702,7 @@ impl HexenlyApp {
             ui.toggle_value(&mut self.show_inspector, "Inspector");
             ui.toggle_value(&mut self.show_template_browser, "Templates");
             ui.toggle_value(&mut self.show_structure_panel, "Structure");
+            ui.toggle_value(&mut self.show_bookmarks, "Bookmarks");
         });
     }
 
@@ -867,6 +871,44 @@ impl App for HexenlyApp {
                 });
         }
 
+        // Right bookmarks panel (before inspector so it appears to its left)
+        if self.show_bookmarks {
+            SidePanel::right("bookmarks")
+                .default_width(250.0)
+                .show(ctx, |ui| {
+                    let action =
+                        bookmarks::show(ui, &mut self.bookmarks, self.cursor_offset);
+                    match action {
+                        Some(BookmarkAction::Add) => {
+                            self.bookmarks.push(Bookmark {
+                                name: format!("Bookmark {}", self.bookmarks.len() + 1),
+                                offset: self.cursor_offset,
+                                note: String::new(),
+                            });
+                            self.bookmarks.sort_by_key(|b| b.offset);
+                            if let Some(file) = &self.file {
+                                save_bookmarks(file.path(), &self.bookmarks);
+                            }
+                        }
+                        Some(BookmarkAction::GoToOffset(off)) => {
+                            self.set_cursor_abs(off);
+                        }
+                        Some(BookmarkAction::Delete(idx)) => {
+                            self.bookmarks.remove(idx);
+                            if let Some(file) = &self.file {
+                                save_bookmarks(file.path(), &self.bookmarks);
+                            }
+                        }
+                        Some(BookmarkAction::Updated) => {
+                            if let Some(file) = &self.file {
+                                save_bookmarks(file.path(), &self.bookmarks);
+                            }
+                        }
+                        None => {}
+                    }
+                });
+        }
+
         // Right inspector panel
         if self.show_inspector {
             SidePanel::right("inspector")
@@ -972,7 +1014,6 @@ fn load_bookmarks(file_path: &std::path::Path) -> Vec<Bookmark> {
         .unwrap_or_default()
 }
 
-#[allow(dead_code)] // Used in Task 4: Bookmarks sidebar panel UI
 fn save_bookmarks(file_path: &std::path::Path, bookmarks: &[Bookmark]) {
     let Some(sidecar) = bookmarks_sidecar_path(file_path) else {
         return;
