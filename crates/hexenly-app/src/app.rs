@@ -37,6 +37,7 @@ pub struct HexenlyApp {
     file: Option<HexFile>,
     cursor_offset: usize,
     selection: Option<Selection>,
+    selection_anchor: Option<usize>,
     selection_pane: HexPane,
     pending_copy: bool,
     columns: usize,
@@ -124,6 +125,7 @@ impl HexenlyApp {
             file: None,
             cursor_offset: 0,
             selection: None,
+            selection_anchor: None,
             selection_pane: HexPane::Hex,
             pending_copy: false,
             columns: 16,
@@ -367,6 +369,7 @@ impl HexenlyApp {
         };
         self.cursor_offset = new_offset;
         self.selection = None;
+        self.selection_anchor = None;
         self.scroll_to_cursor();
     }
 
@@ -378,6 +381,38 @@ impl HexenlyApp {
         }
         self.cursor_offset = offset.min(file.len() - 1);
         self.selection = None;
+        self.selection_anchor = None;
+        self.scroll_to_cursor();
+    }
+
+    /// Move cursor by a signed delta, extending the selection from the anchor.
+    fn move_cursor_select(&mut self, delta: isize) {
+        let Some(file) = &self.file else { return };
+        if file.is_empty() {
+            return;
+        }
+        let max = file.len().saturating_sub(1);
+        let anchor = self.selection_anchor.unwrap_or(self.cursor_offset);
+        self.selection_anchor = Some(anchor);
+        if delta < 0 {
+            self.cursor_offset = self.cursor_offset.saturating_sub(delta.unsigned_abs());
+        } else {
+            self.cursor_offset = self.cursor_offset.saturating_add(delta as usize).min(max);
+        }
+        self.selection = Some(Selection::new(anchor, self.cursor_offset));
+        self.scroll_to_cursor();
+    }
+
+    /// Set cursor to an absolute offset, extending the selection from the anchor.
+    fn set_cursor_select(&mut self, offset: usize) {
+        let Some(file) = &self.file else { return };
+        if file.is_empty() {
+            return;
+        }
+        let anchor = self.selection_anchor.unwrap_or(self.cursor_offset);
+        self.selection_anchor = Some(anchor);
+        self.cursor_offset = offset.min(file.len().saturating_sub(1));
+        self.selection = Some(Selection::new(anchor, self.cursor_offset));
         self.scroll_to_cursor();
     }
 
@@ -396,7 +431,21 @@ impl HexenlyApp {
             ctrl_end: bool,
         }
 
-        let (open, goto, find, escape, copy, nav) = ctx.input_mut(|i| {
+        #[allow(clippy::struct_excessive_bools)]
+        struct ShiftNavKeys {
+            left: bool,
+            right: bool,
+            up: bool,
+            down: bool,
+            page_up: bool,
+            page_down: bool,
+            home: bool,
+            end: bool,
+            ctrl_home: bool,
+            ctrl_end: bool,
+        }
+
+        let (open, goto, find, escape, copy, nav, shift_nav) = ctx.input_mut(|i| {
             let open = i.consume_key(egui::Modifiers::COMMAND, Key::O);
             let goto = i.consume_key(egui::Modifiers::COMMAND, Key::G);
             let find = i.consume_key(egui::Modifiers::COMMAND, Key::F);
@@ -408,6 +457,16 @@ impl HexenlyApp {
             let ctrl_home = i.consume_key(egui::Modifiers::COMMAND, Key::Home);
             let ctrl_end = i.consume_key(egui::Modifiers::COMMAND, Key::End);
 
+            // Shift+Ctrl+Home/End must be consumed before Shift+Home/End
+            let shift_ctrl_home = i.consume_key(
+                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+                Key::Home,
+            );
+            let shift_ctrl_end = i.consume_key(
+                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+                Key::End,
+            );
+
             let left = i.consume_key(egui::Modifiers::NONE, Key::ArrowLeft);
             let right = i.consume_key(egui::Modifiers::NONE, Key::ArrowRight);
             let up = i.consume_key(egui::Modifiers::NONE, Key::ArrowUp);
@@ -416,6 +475,15 @@ impl HexenlyApp {
             let page_down = i.consume_key(egui::Modifiers::NONE, Key::PageDown);
             let home = i.consume_key(egui::Modifiers::NONE, Key::Home);
             let end = i.consume_key(egui::Modifiers::NONE, Key::End);
+
+            let shift_left = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowLeft);
+            let shift_right = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowRight);
+            let shift_up = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowUp);
+            let shift_down = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowDown);
+            let shift_page_up = i.consume_key(egui::Modifiers::SHIFT, Key::PageUp);
+            let shift_page_down = i.consume_key(egui::Modifiers::SHIFT, Key::PageDown);
+            let shift_home = i.consume_key(egui::Modifiers::SHIFT, Key::Home);
+            let shift_end = i.consume_key(egui::Modifiers::SHIFT, Key::End);
 
             let nav = NavKeys {
                 left,
@@ -430,7 +498,20 @@ impl HexenlyApp {
                 ctrl_end,
             };
 
-            (open, goto, find, escape, copy, nav)
+            let shift_nav = ShiftNavKeys {
+                left: shift_left,
+                right: shift_right,
+                up: shift_up,
+                down: shift_down,
+                page_up: shift_page_up,
+                page_down: shift_page_down,
+                home: shift_home,
+                end: shift_end,
+                ctrl_home: shift_ctrl_home,
+                ctrl_end: shift_ctrl_end,
+            };
+
+            (open, goto, find, escape, copy, nav, shift_nav)
         });
 
         if open {
@@ -492,6 +573,45 @@ impl HexenlyApp {
                 && let Some(file) = &self.file
             {
                 self.set_cursor_abs(file.len().saturating_sub(1));
+            }
+
+            // Shift+key selection
+            if shift_nav.left {
+                self.move_cursor_select(-1);
+            }
+            if shift_nav.right {
+                self.move_cursor_select(1);
+            }
+            if shift_nav.up {
+                self.move_cursor_select(-(self.columns as isize));
+            }
+            if shift_nav.down {
+                self.move_cursor_select(self.columns as isize);
+            }
+            if shift_nav.page_up {
+                self.move_cursor_select(-((self.columns * 16) as isize));
+            }
+            if shift_nav.page_down {
+                self.move_cursor_select((self.columns * 16) as isize);
+            }
+            if shift_nav.home {
+                let row_start = (self.cursor_offset / self.columns) * self.columns;
+                self.set_cursor_select(row_start);
+            }
+            if shift_nav.end
+                && let Some(file) = &self.file
+            {
+                let row_start = (self.cursor_offset / self.columns) * self.columns;
+                let row_end = (row_start + self.columns - 1).min(file.len().saturating_sub(1));
+                self.set_cursor_select(row_end);
+            }
+            if shift_nav.ctrl_home {
+                self.set_cursor_select(0);
+            }
+            if shift_nav.ctrl_end
+                && let Some(file) = &self.file
+            {
+                self.set_cursor_select(file.len().saturating_sub(1));
             }
         }
     }
@@ -791,6 +911,7 @@ impl App for HexenlyApp {
                     Some(HexViewAction::SetCursor(off)) if off < file.len() => {
                         self.cursor_offset = off;
                         self.selection = None;
+                        self.selection_anchor = None;
                     }
                     Some(HexViewAction::Select { start, end, pane }) => {
                         let max = file.len().saturating_sub(1);
