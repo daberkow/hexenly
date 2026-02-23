@@ -353,15 +353,84 @@ impl HexenlyApp {
         self.hex_view_state.scroll_to_row = Some(row);
     }
 
+    /// Move cursor by a signed delta, clamping to valid range.
+    fn move_cursor(&mut self, delta: isize) {
+        let Some(file) = &self.file else { return };
+        if file.is_empty() {
+            return;
+        }
+        let max = file.len() - 1;
+        let new_offset = if delta < 0 {
+            self.cursor_offset.saturating_sub(delta.unsigned_abs())
+        } else {
+            self.cursor_offset.saturating_add(delta as usize).min(max)
+        };
+        self.cursor_offset = new_offset;
+        self.selection = None;
+        self.scroll_to_cursor();
+    }
+
+    /// Set cursor to an absolute offset, clamping to valid range.
+    fn set_cursor_abs(&mut self, offset: usize) {
+        let Some(file) = &self.file else { return };
+        if file.is_empty() {
+            return;
+        }
+        self.cursor_offset = offset.min(file.len() - 1);
+        self.selection = None;
+        self.scroll_to_cursor();
+    }
+
     fn handle_shortcuts(&mut self, ctx: &Context) {
-        let (open, goto, find, escape, copy) = ctx.input_mut(|i| {
+        #[allow(clippy::struct_excessive_bools)]
+        struct NavKeys {
+            left: bool,
+            right: bool,
+            up: bool,
+            down: bool,
+            page_up: bool,
+            page_down: bool,
+            home: bool,
+            end: bool,
+            ctrl_home: bool,
+            ctrl_end: bool,
+        }
+
+        let (open, goto, find, escape, copy, nav) = ctx.input_mut(|i| {
             let open = i.consume_key(egui::Modifiers::COMMAND, Key::O);
             let goto = i.consume_key(egui::Modifiers::COMMAND, Key::G);
             let find = i.consume_key(egui::Modifiers::COMMAND, Key::F);
             let escape = i.consume_key(egui::Modifiers::NONE, Key::Escape);
             // eframe converts Ctrl+C into Event::Copy, not a key event
             let copy = i.events.iter().any(|e| matches!(e, egui::Event::Copy));
-            (open, goto, find, escape, copy)
+
+            // Ctrl+Home/End must be consumed before plain Home/End
+            let ctrl_home = i.consume_key(egui::Modifiers::COMMAND, Key::Home);
+            let ctrl_end = i.consume_key(egui::Modifiers::COMMAND, Key::End);
+
+            let left = i.consume_key(egui::Modifiers::NONE, Key::ArrowLeft);
+            let right = i.consume_key(egui::Modifiers::NONE, Key::ArrowRight);
+            let up = i.consume_key(egui::Modifiers::NONE, Key::ArrowUp);
+            let down = i.consume_key(egui::Modifiers::NONE, Key::ArrowDown);
+            let page_up = i.consume_key(egui::Modifiers::NONE, Key::PageUp);
+            let page_down = i.consume_key(egui::Modifiers::NONE, Key::PageDown);
+            let home = i.consume_key(egui::Modifiers::NONE, Key::Home);
+            let end = i.consume_key(egui::Modifiers::NONE, Key::End);
+
+            let nav = NavKeys {
+                left,
+                right,
+                up,
+                down,
+                page_up,
+                page_down,
+                home,
+                end,
+                ctrl_home,
+                ctrl_end,
+            };
+
+            (open, goto, find, escape, copy, nav)
         });
 
         if open {
@@ -383,6 +452,47 @@ impl HexenlyApp {
         // copy is handled at end of update() so nothing overwrites the clipboard
         if copy && self.selection.is_some() {
             self.pending_copy = true;
+        }
+
+        // Keyboard navigation (only when a file is open)
+        if self.file.is_some() {
+            if nav.left {
+                self.move_cursor(-1);
+            }
+            if nav.right {
+                self.move_cursor(1);
+            }
+            if nav.up {
+                self.move_cursor(-(self.columns as isize));
+            }
+            if nav.down {
+                self.move_cursor(self.columns as isize);
+            }
+            if nav.page_up {
+                self.move_cursor(-((self.columns * 16) as isize));
+            }
+            if nav.page_down {
+                self.move_cursor((self.columns * 16) as isize);
+            }
+            if nav.home {
+                let row_start = (self.cursor_offset / self.columns) * self.columns;
+                self.set_cursor_abs(row_start);
+            }
+            if nav.end
+                && let Some(file) = &self.file
+            {
+                let row_start = (self.cursor_offset / self.columns) * self.columns;
+                let row_end = (row_start + self.columns - 1).min(file.len().saturating_sub(1));
+                self.set_cursor_abs(row_end);
+            }
+            if nav.ctrl_home {
+                self.set_cursor_abs(0);
+            }
+            if nav.ctrl_end
+                && let Some(file) = &self.file
+            {
+                self.set_cursor_abs(file.len().saturating_sub(1));
+            }
         }
     }
 
