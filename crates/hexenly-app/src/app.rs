@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use eframe::App;
 use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TopBottomPanel};
 use hexenly_core::{HexFile, SearchPattern, Selection, find_all};
@@ -15,6 +17,21 @@ pub enum TextEncoding {
     Ascii,
     Utf8,
 }
+
+#[derive(Debug, Clone)]
+enum NotificationLevel {
+    Error,
+    Warning,
+}
+
+#[derive(Debug, Clone)]
+struct Notification {
+    message: String,
+    level: NotificationLevel,
+    created: Instant,
+}
+
+const NOTIFICATION_DURATION_SECS: f32 = 5.0;
 
 pub struct HexenlyApp {
     file: Option<HexFile>,
@@ -51,6 +68,7 @@ pub struct HexenlyApp {
     active_template_index: Option<usize>,
     resolved_template: Option<ResolvedTemplate>,
     template_filter: String,
+    notifications: Vec<Notification>,
 }
 
 impl HexenlyApp {
@@ -89,8 +107,14 @@ impl HexenlyApp {
             include_str!("../../../templates/filesystems/fat32.toml"),
         );
 
+        let mut notifications = Vec::new();
         for (name, err) in &registry.load_errors {
             tracing::error!("Failed to load template {name}: {err}");
+            notifications.push(Notification {
+                message: format!("Failed to load template {name}: {err}"),
+                level: NotificationLevel::Error,
+                created: Instant::now(),
+            });
         }
 
         Self {
@@ -119,6 +143,7 @@ impl HexenlyApp {
             active_template_index: None,
             resolved_template: None,
             template_filter: String::new(),
+            notifications,
         }
     }
 
@@ -204,6 +229,11 @@ impl HexenlyApp {
 
         for warning in &result.warnings {
             tracing::warn!("Template resolve: {warning}");
+            self.notifications.push(Notification {
+                message: format!("Template: {warning}"),
+                level: NotificationLevel::Warning,
+                created: Instant::now(),
+            });
         }
 
         self.resolved_template = Some(result.template);
@@ -279,6 +309,37 @@ impl HexenlyApp {
         }
         self.show_goto = false;
         self.goto_input.clear();
+    }
+
+    fn show_notifications(&mut self, ctx: &egui::Context) {
+        let now = Instant::now();
+        self.notifications.retain(|n| now.duration_since(n.created).as_secs_f32() < NOTIFICATION_DURATION_SECS);
+
+        if self.notifications.is_empty() {
+            return;
+        }
+
+        egui::Area::new(egui::Id::new("notifications"))
+            .anchor(egui::Align2::RIGHT_TOP, [-8.0, 8.0])
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    for notification in &self.notifications {
+                        let elapsed = now.duration_since(notification.created).as_secs_f32();
+                        let alpha = if elapsed > NOTIFICATION_DURATION_SECS - 1.0 {
+                            ((NOTIFICATION_DURATION_SECS - elapsed).max(0.0) * 255.0) as u8
+                        } else {
+                            255
+                        };
+                        let color = match notification.level {
+                            NotificationLevel::Error => Color32::from_rgba_unmultiplied(220, 80, 80, alpha),
+                            NotificationLevel::Warning => Color32::from_rgba_unmultiplied(220, 180, 60, alpha),
+                        };
+                        ui.label(RichText::new(&notification.message).color(color));
+                    }
+                });
+            });
+
+        ctx.request_repaint();
     }
 
     fn scroll_to_cursor(&mut self) {
@@ -546,6 +607,8 @@ impl App for HexenlyApp {
                 });
             }
         });
+
+        self.show_notifications(ctx);
     }
 }
 
