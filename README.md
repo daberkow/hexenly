@@ -4,54 +4,68 @@
 
 <h1 align="center">Hexenly</h1>
 
-<p align="center">A hex editor with structured binary template support, built with Rust and egui.</p>
+<p align="center">
+  A hex editor that understands binary formats.<br>
+  Built with Rust and <a href="https://github.com/emilk/egui">egui</a>.
+</p>
 
-Hexenly lets you open any binary file and inspect its raw bytes in a familiar hex+ASCII view. Apply built-in templates for common formats (PNG, BMP, ELF, ZIP, ISO 9660, FAT32, Cybiko CFS) to see color-coded structure overlays, field-level breakdowns, and decoded values — all without leaving the editor.
+---
 
-## Features
+<p align="center">
+  <img src="docs/screenshot.png" alt="Hexenly screenshot showing a ZIP file with color-coded template overlay" width="800">
+</p>
 
-- Memory-mapped file I/O for fast loading of large files
-- Color-coded hex + ASCII display with configurable column widths (8/16/24/32)
-- Hex and ASCII pane editing with insert/overwrite modes
-- Undo/redo with full edit history
-- Byte inspector with little-endian and big-endian interpretations
-- Hex and text search with match navigation
-- Go-to-offset (decimal or `0x` hex)
-- Drag-and-drop file opening
-- Menu bar with File/Edit/View menus and keyboard shortcuts
-- Template engine with TOML-based binary format definitions
-- Dynamic template expressions: field references, arithmetic, conditions, repeating regions
-- Auto-detection of file format via magic bytes or extension
-- Structure panel showing resolved regions and fields with decoded values
-- Click any field in the structure panel to jump to its offset
+Hexenly lets you open any file and see its raw bytes in a side-by-side hex + ASCII view. What makes it different is **templates** — structured overlays that color-code regions, decode fields, and show you what each byte actually means. Open a PNG and immediately see the IHDR chunk, image dimensions, and color type. Open a ZIP and watch it walk through every local file entry.
 
-## Requirements
+Templates are simple TOML files you can write yourself, with support for dynamic field lengths, repeating sections, conditional regions, and arithmetic expressions.
 
-- Rust 1.85+ (edition 2024)
-- A working C compiler and linker (for native dependencies)
-- On Linux: development packages for a display server
-  - X11: `libxcb`, `libxkbcommon` and related `-dev`/`-devel` packages
-  - Wayland: `libwayland-client`, `libxkbcommon` and related `-dev`/`-devel` packages
-  - Fedora: `sudo dnf install libxcb-devel libxkbcommon-devel wayland-devel`
-  - Ubuntu/Debian: `sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev`
+## Getting Started
 
-## Building
+**Download** a pre-built binary from the [Releases](https://github.com/hexenly/hexenly/releases) page, or build from source:
 
 ```sh
 cargo build --release
 ```
 
-## Running
+Then run it:
 
 ```sh
+# Launch empty
 cargo run -p hexenly-app
-```
 
-Open a file directly:
-
-```sh
+# Open a file directly
 cargo run -p hexenly-app -- path/to/file.png
 ```
+
+You can also just drag and drop a file onto the window.
+
+### Build Requirements
+
+- Rust 1.85+
+- On Linux: display server dev packages
+  - Fedora: `sudo dnf install libxcb-devel libxkbcommon-devel wayland-devel`
+  - Ubuntu/Debian: `sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev`
+
+## Features
+
+**Viewing**
+- Hex + ASCII display with configurable column widths (8, 16, 24, or 32)
+- Byte inspector showing values as integers, floats, and strings in both endianness
+- Hex and text search with match navigation
+- Go-to-offset (decimal or `0x` hex)
+
+**Editing**
+- Insert and overwrite modes (toggle with `Insert` key)
+- Full undo/redo history
+- Nibble-level hex input and ASCII pane editing
+- Save and Save As with atomic writes
+
+**Templates**
+- 7 built-in templates: PNG, BMP, ELF, ZIP, ISO 9660, FAT32, Cybiko CFS
+- Auto-detection via magic bytes or file extension
+- Structure panel with decoded field values — click any field to jump to its offset
+- Color-coded hex overlay showing which bytes belong to which region
+- Write your own templates in TOML (see `templates/` for examples)
 
 ## Keyboard Shortcuts
 
@@ -68,21 +82,57 @@ cargo run -p hexenly-app -- path/to/file.png
 | `Insert` | Toggle insert/overwrite mode |
 | `Esc` | Close dialog |
 
-## Built-in Templates
+## Writing Templates
 
-Hexenly ships with templates for these formats:
+Templates are TOML files that describe binary format structure. Here's a minimal example:
 
-| Format | Coverage |
-|--------|----------|
-| PNG | Signature + IHDR chunk |
-| BMP | File header + DIB header |
-| ELF | Identification + 64-bit header |
-| ZIP | Local file entries (repeating, with dynamic field lengths) |
-| ISO 9660 | Primary volume descriptor + path table |
-| FAT32 | Boot sector + BPB + FSInfo |
-| Cybiko CFS | Xtreme flash filesystem (boot blocks + file pages) |
+```toml
+name = "My Format"
+description = "Example binary format"
+magic = "4D59464D"  # "MYFM" in hex
+extensions = ["myf"]
+endian = "little"
 
-Templates are TOML files — see `templates/` for examples. When you open a file, Hexenly checks magic bytes first, then falls back to the file extension to auto-apply the right template.
+[[regions]]
+id = "header"
+label = "File Header"
+color = "#2ECC71"
+offset = 0
+
+[[regions.fields]]
+id = "magic"
+label = "Magic"
+field_type = "ascii"
+length = 4
+role = "magic"
+
+[[regions.fields]]
+id = "version"
+label = "Version"
+field_type = "u16_le"
+length = 2
+
+[[regions.fields]]
+id = "data_size"
+label = "Data Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+
+[[regions]]
+id = "payload"
+label = "Payload"
+color = "#E74C3C"
+offset = 10
+
+[[regions.fields]]
+id = "data"
+label = "Data"
+field_type = "bytes"
+length = "from:data_size"
+```
+
+Templates support dynamic field lengths (`from:field_id`), computed offsets (`expr:field_a * 2048`), repeating regions (`until_eof`, `count`, `until_magic`), conditional inclusion, enum labels, and bitflag decoding. See the built-in templates in `templates/` for real-world examples.
 
 ## License
 
