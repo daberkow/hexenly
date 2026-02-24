@@ -32,6 +32,14 @@ cargo run -p hexenly-app -- path/to/file.bin
 - **Phase 1** (complete): Hex viewer, mmap file reading, painter-based hex grid, byte inspector, search, go-to-offset
 - **Phase 2** (complete): Template engine — TOML parsing, resolution engine (static offsets/lengths), overlay rendering, template browser sidebar, structure map panel, auto-detection via magic bytes, 4 built-in templates
 - **Phase 3** (complete): Dynamic expressions (`AfterField`, `FromField`, `Expr` offsets/lengths), repeating regions (`Count`, `UntilEof`, `UntilMagic`), conditional regions/fields, arithmetic expressions, enum/bitflag display, 7 built-in templates
+- **Future ideas**:
+  - Find & replace (hex and ASCII patterns)
+  - Copy/paste (as hex, ASCII, C array, Python bytes, etc.)
+  - Data visualization (entropy graph, byte histogram, strings view)
+  - File diffing (side-by-side comparison of two files)
+  - More templates (PE/COFF, WAV, GIF, TAR, etc.)
+  - Inspector enhancements (date decoders, text encodings, bitfield view)
+  - Export (save selection as file, export to various formats)
 
 ## Template Format
 

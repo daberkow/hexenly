@@ -8,6 +8,7 @@ license.workspace = true
 hexenly-core = { workspace = true }
 hexenly-templates = { workspace = true }
 eframe = { workspace = true }
+image = { workspace = true }
 egui = { workspace = true }
 rfd = { workspace = true }
 serde = { workspace = true }
