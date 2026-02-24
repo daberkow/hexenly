@@ -486,7 +486,24 @@ impl HexenlyApp {
             ctrl_end: bool,
         }
 
-        let (open, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark) = ctx.input_mut(|i| {
+        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark) = ctx.input_mut(|i| {
+            // Ctrl+Shift+S must be consumed BEFORE Ctrl+S
+            let save_as = i.consume_key(
+                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+                Key::S,
+            );
+            let save = i.consume_key(egui::Modifiers::COMMAND, Key::S);
+
+            // Ctrl+Shift+Z must be consumed BEFORE Ctrl+Z
+            let redo = i.consume_key(
+                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+                Key::Z,
+            );
+            let undo = i.consume_key(egui::Modifiers::COMMAND, Key::Z);
+
+            let select_all = i.consume_key(egui::Modifiers::COMMAND, Key::A);
+            let insert_key = i.consume_key(egui::Modifiers::NONE, Key::Insert);
+
             let open = i.consume_key(egui::Modifiers::COMMAND, Key::O);
             let goto = i.consume_key(egui::Modifiers::COMMAND, Key::G);
             let find = i.consume_key(egui::Modifiers::COMMAND, Key::F);
@@ -567,11 +584,37 @@ impl HexenlyApp {
                 ctrl_end: shift_ctrl_end,
             };
 
-            (open, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark)
+            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark)
         });
 
         if open {
             self.open_file_dialog();
+        }
+        if save {
+            self.save_file();
+        }
+        if save_as {
+            self.save_file_as();
+        }
+        if undo
+            && let Some(buf) = &mut self.edit_buffer
+        {
+            buf.undo();
+        }
+        if redo
+            && let Some(buf) = &mut self.edit_buffer
+        {
+            buf.redo();
+        }
+        if select_all && self.data_len() > 0 {
+            let max = self.data_len() - 1;
+            self.selection = Some(Selection::new(0, max));
+            self.selection_anchor = Some(0);
+        }
+        if insert_key
+            && let Some(buf) = &mut self.edit_buffer
+        {
+            buf.toggle_mode();
         }
         if goto {
             self.show_goto = !self.show_goto;
@@ -729,54 +772,207 @@ impl HexenlyApp {
         ctx.copy_text(text);
     }
 
-    fn show_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui.button("Open").clicked() {
-                self.open_file_dialog();
-            }
+    fn show_menu_bar(&mut self, ui: &mut egui::Ui) {
+        let file_open = self.edit_buffer.is_some();
+        let is_dirty = self.edit_buffer.as_ref().is_some_and(|b| b.is_dirty());
+        let can_undo = self.edit_buffer.as_ref().is_some_and(|b| b.can_undo());
+        let can_redo = self.edit_buffer.as_ref().is_some_and(|b| b.can_redo());
+        let data_len = self.data_len();
 
-            ui.separator();
-
-            ui.label("Columns:");
-            if ui
-                .selectable_label(self.auto_columns, "Auto")
-                .clicked()
-            {
-                self.auto_columns = true;
-            }
-            for &n in &[8, 16, 24, 32, 48] {
+        egui::MenuBar::new().ui(ui, |ui| {
+            ui.menu_button("File", |ui| {
                 if ui
-                    .selectable_label(!self.auto_columns && self.columns == n, format!("{n}"))
+                    .add(egui::Button::new("Open").shortcut_text("Ctrl+O"))
                     .clicked()
                 {
-                    self.columns = n;
-                    self.auto_columns = false;
+                    ui.close();
+                    self.open_file_dialog();
                 }
-            }
+                if ui
+                    .add_enabled(
+                        file_open && is_dirty,
+                        egui::Button::new("Save").shortcut_text("Ctrl+S"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    self.save_file();
+                }
+                if ui
+                    .add_enabled(
+                        file_open,
+                        egui::Button::new("Save As...").shortcut_text("Ctrl+Shift+S"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    self.save_file_as();
+                }
+            });
 
-            ui.separator();
+            ui.menu_button("Edit", |ui| {
+                if ui
+                    .add_enabled(
+                        can_undo,
+                        egui::Button::new("Undo").shortcut_text("Ctrl+Z"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    if let Some(buf) = &mut self.edit_buffer {
+                        buf.undo();
+                    }
+                }
+                if ui
+                    .add_enabled(
+                        can_redo,
+                        egui::Button::new("Redo").shortcut_text("Ctrl+Shift+Z"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    if let Some(buf) = &mut self.edit_buffer {
+                        buf.redo();
+                    }
+                }
+                ui.separator();
+                if ui
+                    .add(egui::Button::new("Find").shortcut_text("Ctrl+F"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.show_search = !self.show_search;
+                    self.focus_search = self.show_search;
+                    self.show_goto = false;
+                }
+                if ui
+                    .add(egui::Button::new("Go to Offset").shortcut_text("Ctrl+G"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.show_goto = !self.show_goto;
+                    self.show_search = false;
+                }
+                ui.separator();
+                if ui
+                    .add_enabled(
+                        data_len > 0,
+                        egui::Button::new("Select All").shortcut_text("Ctrl+A"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    let max = data_len - 1;
+                    self.selection = Some(Selection::new(0, max));
+                    self.selection_anchor = Some(0);
+                }
+            });
 
-            if ui
-                .selectable_label(self.text_encoding == TextEncoding::Ascii, "ASCII")
-                .clicked()
-            {
-                self.text_encoding = TextEncoding::Ascii;
-            }
-            if ui
-                .selectable_label(self.text_encoding == TextEncoding::Utf8, "UTF-8")
-                .clicked()
-            {
-                self.text_encoding = TextEncoding::Utf8;
-            }
-
-            ui.separator();
-
-            ui.toggle_value(&mut self.show_ascii_pane, "ASCII Pane");
-            ui.toggle_value(&mut self.show_inspector, "Inspector");
-            ui.toggle_value(&mut self.show_template_browser, "Templates");
-            ui.toggle_value(&mut self.show_structure_panel, "Structure");
-            ui.toggle_value(&mut self.show_bookmarks, "Bookmarks");
+            ui.menu_button("View", |ui| {
+                ui.menu_button("Columns", |ui| {
+                    if ui.selectable_label(self.auto_columns, "Auto").clicked() {
+                        self.auto_columns = true;
+                        ui.close();
+                    }
+                    for &n in &[8, 16, 24, 32, 48] {
+                        if ui
+                            .selectable_label(!self.auto_columns && self.columns == n, format!("{n}"))
+                            .clicked()
+                        {
+                            self.columns = n;
+                            self.auto_columns = false;
+                            ui.close();
+                        }
+                    }
+                });
+                ui.menu_button("Encoding", |ui| {
+                    if ui
+                        .selectable_label(self.text_encoding == TextEncoding::Ascii, "ASCII")
+                        .clicked()
+                    {
+                        self.text_encoding = TextEncoding::Ascii;
+                        ui.close();
+                    }
+                    if ui
+                        .selectable_label(self.text_encoding == TextEncoding::Utf8, "UTF-8")
+                        .clicked()
+                    {
+                        self.text_encoding = TextEncoding::Utf8;
+                        ui.close();
+                    }
+                });
+                ui.separator();
+                if ui
+                    .selectable_label(self.show_ascii_pane, "ASCII Pane")
+                    .clicked()
+                {
+                    self.show_ascii_pane = !self.show_ascii_pane;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.show_inspector, "Inspector")
+                    .clicked()
+                {
+                    self.show_inspector = !self.show_inspector;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.show_template_browser, "Templates")
+                    .clicked()
+                {
+                    self.show_template_browser = !self.show_template_browser;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.show_structure_panel, "Structure")
+                    .clicked()
+                {
+                    self.show_structure_panel = !self.show_structure_panel;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.show_bookmarks, "Bookmarks")
+                    .clicked()
+                {
+                    self.show_bookmarks = !self.show_bookmarks;
+                    ui.close();
+                }
+            });
         });
+    }
+
+    fn save_file(&mut self) {
+        if let Some(buf) = &mut self.edit_buffer
+            && let Err(e) = buf.save()
+        {
+            self.notifications.push(Notification {
+                message: format!("Save failed: {e}"),
+                level: NotificationLevel::Error,
+                created: Instant::now(),
+            });
+        }
+    }
+
+    fn save_file_as(&mut self) {
+        let Some(buf) = &mut self.edit_buffer else { return };
+        let mut dialog = rfd::FileDialog::new();
+        if let Some(path) = buf.file_path() {
+            if let Some(dir) = path.parent() {
+                dialog = dialog.set_directory(dir);
+            }
+            if let Some(name) = path.file_name() {
+                dialog = dialog.set_file_name(name.to_string_lossy().to_string());
+            }
+        }
+        if let Some(path) = dialog.save_file()
+            && let Err(e) = buf.save_as(&path)
+        {
+            self.notifications.push(Notification {
+                message: format!("Save failed: {e}"),
+                level: NotificationLevel::Error,
+                created: Instant::now(),
+            });
+        }
     }
 
     fn show_search_bar(&mut self, ui: &mut egui::Ui) {
@@ -896,9 +1092,9 @@ impl App for HexenlyApp {
 
         self.handle_shortcuts(ctx);
 
-        // Top toolbar
-        TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            self.show_toolbar(ui);
+        // Top menu bar
+        TopBottomPanel::top("menubar").show(ctx, |ui| {
+            self.show_menu_bar(ui);
             self.show_search_bar(ui);
             self.show_goto_bar(ui);
         });
