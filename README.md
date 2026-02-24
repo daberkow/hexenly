@@ -15,7 +15,7 @@
   <img src="docs/screenshot.png" alt="Hexenly screenshot showing a ZIP file with color-coded template overlay" width="800">
 </p>
 
-Hexenly lets you open any file and see its raw bytes in a side-by-side hex + ASCII view. What makes it different is **templates** — structured overlays that color-code regions, decode fields, and show you what each byte actually means. Open a PNG and immediately see the IHDR chunk, image dimensions, and color type. Open a ZIP and watch it walk through every local file entry.
+Hexenly lets you open any file and see its raw bytes in a side-by-side hex + ASCII view. What makes it different is **templates** — structured overlays that color-code regions, decode fields, and show you what each byte actually means. Open a PNG and immediately see the IHDR chunk, image dimensions, and color type. Open a ZIP and watch it walk through every local file entry.  This program was written heavily with Claude with me learning Rust.
 
 Templates are simple TOML files you can write yourself, with support for dynamic field lengths, repeating sections, conditional regions, and arithmetic expressions.
 
