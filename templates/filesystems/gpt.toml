@@ -1,0 +1,204 @@
+name = "GPT"
+description = "GUID Partition Table — protective MBR, GPT header, and first partition entry"
+extensions = ["img", "bin", "gpt"]
+magic = "4546492050415254"
+magic_offset = 512
+endian = "little"
+
+[[regions]]
+id = "protective_mbr"
+label = "Protective MBR"
+color = "#7F8C8D"
+offset = 0
+length = 512
+group = "mbr"
+description = "Reserved for protective MBR (legacy compatibility)"
+
+[[regions.fields]]
+id = "pmbr_data"
+label = "Protective MBR Data"
+field_type = "bytes"
+length = 512
+role = "reserved"
+description = "Protective MBR prevents legacy tools from overwriting GPT data"
+
+[[regions]]
+id = "gpt_header"
+label = "GPT Header"
+color = "#2ECC71"
+offset = 512
+length = 92
+group = "header"
+description = "Primary GPT header at LBA 1"
+
+[[regions.fields]]
+id = "gpt_signature"
+label = "Signature"
+field_type = "ascii"
+length = 8
+role = "magic"
+description = "Must be 'EFI PART' (0x4546492050415254)"
+
+[[regions.fields]]
+id = "gpt_revision"
+label = "Revision"
+field_type = "u32_le"
+length = 4
+role = "version"
+description = "GPT revision number (1.0 = 0x00010000)"
+
+[[regions.fields]]
+id = "gpt_header_size"
+label = "Header Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of the GPT header in bytes (usually 92)"
+
+[[regions.fields]]
+id = "gpt_header_crc32"
+label = "Header CRC32"
+field_type = "u32_le"
+length = 4
+role = "checksum"
+description = "CRC32 of the header (with this field zeroed during calculation)"
+
+[[regions.fields]]
+id = "gpt_reserved"
+label = "Reserved"
+field_type = "u32_le"
+length = 4
+role = "reserved"
+description = "Must be zero"
+
+[[regions.fields]]
+id = "gpt_my_lba"
+label = "My LBA"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "LBA of this header (1 for primary)"
+
+[[regions.fields]]
+id = "gpt_alternate_lba"
+label = "Alternate LBA"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "LBA of the alternate (backup) GPT header"
+
+[[regions.fields]]
+id = "gpt_first_usable_lba"
+label = "First Usable LBA"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "First LBA usable for partitions"
+
+[[regions.fields]]
+id = "gpt_last_usable_lba"
+label = "Last Usable LBA"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "Last LBA usable for partitions"
+
+[[regions.fields]]
+id = "gpt_disk_guid"
+label = "Disk GUID"
+field_type = "bytes"
+length = 16
+description = "Unique identifier for the disk (mixed-endian GUID)"
+
+[[regions.fields]]
+id = "gpt_partition_entry_lba"
+label = "Partition Entry Start LBA"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "Starting LBA of the partition entry array (usually 2)"
+
+[[regions.fields]]
+id = "gpt_num_partition_entries"
+label = "Number of Partition Entries"
+field_type = "u32_le"
+length = 4
+role = "count"
+description = "Number of entries in the partition array (usually 128)"
+
+[[regions.fields]]
+id = "gpt_partition_entry_size"
+label = "Partition Entry Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of each partition entry in bytes (usually 128)"
+
+[[regions.fields]]
+id = "gpt_partition_crc32"
+label = "Partition Entries CRC32"
+field_type = "u32_le"
+length = 4
+role = "checksum"
+description = "CRC32 of the entire partition entry array"
+
+[[regions]]
+id = "partition_entry_1"
+label = "Partition Entry 1"
+color = "#3498DB"
+offset = 1024
+length = 128
+group = "entries"
+description = "First GPT partition entry at LBA 2"
+
+[[regions.fields]]
+id = "pe1_type_guid"
+label = "Partition Type GUID"
+field_type = "bytes"
+length = 16
+description = "GUID identifying the partition type (e.g. EFI System, Microsoft Basic Data)"
+
+[[regions.fields]]
+id = "pe1_unique_guid"
+label = "Unique Partition GUID"
+field_type = "bytes"
+length = 16
+description = "Unique identifier for this specific partition"
+
+[[regions.fields]]
+id = "pe1_starting_lba"
+label = "Starting LBA"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "First LBA of the partition"
+
+[[regions.fields]]
+id = "pe1_ending_lba"
+label = "Ending LBA"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "Last LBA of the partition (inclusive)"
+
+[[regions.fields]]
+id = "pe1_attributes"
+label = "Attributes"
+field_type = "u64_le"
+length = 8
+description = "Partition attribute flags"
+
+[regions.fields.bit_flags]
+"0" = "Platform required"
+"1" = "EFI firmware ignore"
+"2" = "Legacy BIOS bootable"
+"60" = "Read-only"
+"62" = "Hidden"
+"63" = "No auto mount"
+
+[[regions.fields]]
+id = "pe1_name"
+label = "Partition Name"
+field_type = "bytes"
+length = 72
+description = "Partition name in UTF-16LE (up to 36 characters)"

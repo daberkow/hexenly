@@ -1,0 +1,143 @@
+name = "WAV"
+description = "Waveform Audio File Format (RIFF/WAVE)"
+extensions = ["wav"]
+magic = "52494646"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "riff_header"
+label = "RIFF Header"
+color = "#E67E22"
+offset = 0
+length = 12
+group = "header"
+description = "RIFF container header with file size and WAVE format identifier"
+
+[[regions.fields]]
+id = "chunk_id"
+label = "Chunk ID"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "RIFF"
+
+[[regions.fields]]
+id = "chunk_size"
+label = "Chunk Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of the rest of the file (file size minus 8)"
+
+[[regions.fields]]
+id = "format"
+label = "Format"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "WAVE"
+
+[[regions]]
+id = "fmt_chunk"
+label = "Format Chunk"
+color = "#3498DB"
+offset = 12
+length = 24
+group = "header"
+description = "Audio format parameters (fmt sub-chunk)"
+
+[[regions.fields]]
+id = "fmt_id"
+label = "Sub-chunk ID"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "fmt "
+
+[[regions.fields]]
+id = "fmt_size"
+label = "Sub-chunk Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of fmt data (16 for PCM, 18 or 40 for extended)"
+
+[[regions.fields]]
+id = "audio_format"
+label = "Audio Format"
+field_type = "u16_le"
+length = 2
+description = "1=PCM, 3=IEEE float, 6=A-law, 7=mu-law"
+
+[regions.fields.enum_values]
+"1" = "PCM"
+"2" = "ADPCM"
+"3" = "IEEE Float"
+"6" = "A-law"
+"7" = "Mu-law"
+"65534" = "Extensible"
+
+[[regions.fields]]
+id = "num_channels"
+label = "Channels"
+field_type = "u16_le"
+length = 2
+description = "Number of audio channels (1=mono, 2=stereo)"
+
+[regions.fields.enum_values]
+"1" = "Mono"
+"2" = "Stereo"
+
+[[regions.fields]]
+id = "sample_rate"
+label = "Sample Rate"
+field_type = "u32_le"
+length = 4
+description = "Samples per second (e.g. 44100, 48000)"
+
+[[regions.fields]]
+id = "byte_rate"
+label = "Byte Rate"
+field_type = "u32_le"
+length = 4
+description = "SampleRate * Channels * BitsPerSample / 8"
+
+[[regions.fields]]
+id = "block_align"
+label = "Block Align"
+field_type = "u16_le"
+length = 2
+description = "Channels * BitsPerSample / 8"
+
+[[regions.fields]]
+id = "bits_per_sample"
+label = "Bits Per Sample"
+field_type = "u16_le"
+length = 2
+description = "8, 16, 24, or 32 bits per sample"
+
+[[regions]]
+id = "data_chunk"
+label = "Data Chunk Header"
+color = "#9B59B6"
+offset = 36
+length = 8
+group = "data"
+description = "Audio data sub-chunk header"
+
+[[regions.fields]]
+id = "data_id"
+label = "Sub-chunk ID"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "data"
+
+[[regions.fields]]
+id = "data_size"
+label = "Data Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of audio data in bytes"

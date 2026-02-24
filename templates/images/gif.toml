@@ -1,0 +1,84 @@
+name = "GIF"
+description = "Graphics Interchange Format image"
+extensions = ["gif"]
+magic = "474946"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "header"
+label = "GIF Header"
+color = "#E74C3C"
+offset = 0
+length = 6
+group = "header"
+description = "GIF signature and version (GIF87a or GIF89a)"
+
+[[regions.fields]]
+id = "signature"
+label = "Signature"
+field_type = "ascii"
+length = 3
+role = "magic"
+description = "GIF"
+
+[[regions.fields]]
+id = "version"
+label = "Version"
+field_type = "ascii"
+length = 3
+description = "87a or 89a"
+
+[[regions]]
+id = "logical_screen"
+label = "Logical Screen Descriptor"
+color = "#2ECC71"
+offset = 6
+length = 7
+group = "header"
+description = "Screen dimensions and global color table parameters"
+
+[[regions.fields]]
+id = "width"
+label = "Width"
+field_type = "u16_le"
+length = 2
+description = "Logical screen width in pixels"
+
+[[regions.fields]]
+id = "height"
+label = "Height"
+field_type = "u16_le"
+length = 2
+description = "Logical screen height in pixels"
+
+[[regions.fields]]
+id = "packed"
+label = "Packed Field"
+field_type = "u8"
+length = 1
+description = "Global color table flag, color resolution, sort flag, GCT size"
+
+[regions.fields.bit_flags]
+"7" = "Global Color Table Flag"
+"4" = "Color Resolution (bit 2)"
+"5" = "Color Resolution (bit 1)"
+"6" = "Color Resolution (bit 0)"
+"3" = "Sort Flag"
+"0" = "GCT Size (bit 2)"
+"1" = "GCT Size (bit 1)"
+"2" = "GCT Size (bit 0)"
+
+[[regions.fields]]
+id = "bg_color_index"
+label = "Background Color Index"
+field_type = "u8"
+length = 1
+description = "Index into global color table for background color"
+
+[[regions.fields]]
+id = "pixel_aspect_ratio"
+label = "Pixel Aspect Ratio"
+field_type = "u8"
+length = 1
+description = "Pixel aspect ratio (0 = not given)"

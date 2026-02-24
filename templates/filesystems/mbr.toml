@@ -1,0 +1,338 @@
+name = "MBR"
+description = "Master Boot Record — boot code, four partition entries, and boot signature"
+extensions = ["img", "bin", "mbr"]
+endian = "little"
+
+[[regions]]
+id = "boot_code"
+label = "Boot Code"
+color = "#7F8C8D"
+offset = 0
+length = 446
+group = "mbr"
+description = "x86 bootstrap code executed by BIOS at boot"
+
+[[regions.fields]]
+id = "boot_code_data"
+label = "Bootstrap Code"
+field_type = "bytes"
+length = 446
+role = "data"
+description = "Machine code loaded and executed by BIOS from the first sector"
+
+[[regions]]
+id = "partition_1"
+label = "Partition Entry 1"
+color = "#2ECC71"
+offset = 446
+length = 16
+group = "partition_table"
+description = "First partition table entry"
+
+[[regions.fields]]
+id = "p1_status"
+label = "Status / Active Flag"
+field_type = "u8"
+length = 1
+description = "0x80 = active/bootable, 0x00 = inactive"
+
+[regions.fields.enum_values]
+"0" = "Inactive"
+"128" = "Active (Bootable)"
+
+[[regions.fields]]
+id = "p1_chs_first"
+label = "CHS First Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of first sector"
+
+[[regions.fields]]
+id = "p1_type"
+label = "Partition Type"
+field_type = "u8"
+length = 1
+description = "Filesystem or partition type identifier"
+
+[regions.fields.enum_values]
+"0" = "Empty"
+"1" = "FAT12"
+"4" = "FAT16 (<32 MB)"
+"5" = "Extended"
+"6" = "FAT16B (>32 MB)"
+"7" = "NTFS/exFAT"
+"11" = "FAT32"
+"12" = "FAT32 LBA"
+"14" = "FAT16 LBA"
+"15" = "Extended LBA"
+"130" = "Linux swap"
+"131" = "Linux"
+"133" = "Linux extended"
+"142" = "Linux LVM"
+"238" = "GPT protective"
+"239" = "EFI System"
+
+[[regions.fields]]
+id = "p1_chs_last"
+label = "CHS Last Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of last sector"
+
+[[regions.fields]]
+id = "p1_lba_first"
+label = "LBA First Sector"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Logical block address of first sector"
+
+[[regions.fields]]
+id = "p1_sector_count"
+label = "Sector Count"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Total number of sectors in partition"
+
+[[regions]]
+id = "partition_2"
+label = "Partition Entry 2"
+color = "#3498DB"
+offset = 462
+length = 16
+group = "partition_table"
+description = "Second partition table entry"
+
+[[regions.fields]]
+id = "p2_status"
+label = "Status / Active Flag"
+field_type = "u8"
+length = 1
+description = "0x80 = active/bootable, 0x00 = inactive"
+
+[regions.fields.enum_values]
+"0" = "Inactive"
+"128" = "Active (Bootable)"
+
+[[regions.fields]]
+id = "p2_chs_first"
+label = "CHS First Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of first sector"
+
+[[regions.fields]]
+id = "p2_type"
+label = "Partition Type"
+field_type = "u8"
+length = 1
+description = "Filesystem or partition type identifier"
+
+[regions.fields.enum_values]
+"0" = "Empty"
+"1" = "FAT12"
+"4" = "FAT16 (<32 MB)"
+"5" = "Extended"
+"6" = "FAT16B (>32 MB)"
+"7" = "NTFS/exFAT"
+"11" = "FAT32"
+"12" = "FAT32 LBA"
+"14" = "FAT16 LBA"
+"15" = "Extended LBA"
+"130" = "Linux swap"
+"131" = "Linux"
+"133" = "Linux extended"
+"142" = "Linux LVM"
+"238" = "GPT protective"
+"239" = "EFI System"
+
+[[regions.fields]]
+id = "p2_chs_last"
+label = "CHS Last Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of last sector"
+
+[[regions.fields]]
+id = "p2_lba_first"
+label = "LBA First Sector"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Logical block address of first sector"
+
+[[regions.fields]]
+id = "p2_sector_count"
+label = "Sector Count"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Total number of sectors in partition"
+
+[[regions]]
+id = "partition_3"
+label = "Partition Entry 3"
+color = "#E67E22"
+offset = 478
+length = 16
+group = "partition_table"
+description = "Third partition table entry"
+
+[[regions.fields]]
+id = "p3_status"
+label = "Status / Active Flag"
+field_type = "u8"
+length = 1
+description = "0x80 = active/bootable, 0x00 = inactive"
+
+[regions.fields.enum_values]
+"0" = "Inactive"
+"128" = "Active (Bootable)"
+
+[[regions.fields]]
+id = "p3_chs_first"
+label = "CHS First Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of first sector"
+
+[[regions.fields]]
+id = "p3_type"
+label = "Partition Type"
+field_type = "u8"
+length = 1
+description = "Filesystem or partition type identifier"
+
+[regions.fields.enum_values]
+"0" = "Empty"
+"1" = "FAT12"
+"4" = "FAT16 (<32 MB)"
+"5" = "Extended"
+"6" = "FAT16B (>32 MB)"
+"7" = "NTFS/exFAT"
+"11" = "FAT32"
+"12" = "FAT32 LBA"
+"14" = "FAT16 LBA"
+"15" = "Extended LBA"
+"130" = "Linux swap"
+"131" = "Linux"
+"133" = "Linux extended"
+"142" = "Linux LVM"
+"238" = "GPT protective"
+"239" = "EFI System"
+
+[[regions.fields]]
+id = "p3_chs_last"
+label = "CHS Last Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of last sector"
+
+[[regions.fields]]
+id = "p3_lba_first"
+label = "LBA First Sector"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Logical block address of first sector"
+
+[[regions.fields]]
+id = "p3_sector_count"
+label = "Sector Count"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Total number of sectors in partition"
+
+[[regions]]
+id = "partition_4"
+label = "Partition Entry 4"
+color = "#9B59B6"
+offset = 494
+length = 16
+group = "partition_table"
+description = "Fourth partition table entry"
+
+[[regions.fields]]
+id = "p4_status"
+label = "Status / Active Flag"
+field_type = "u8"
+length = 1
+description = "0x80 = active/bootable, 0x00 = inactive"
+
+[regions.fields.enum_values]
+"0" = "Inactive"
+"128" = "Active (Bootable)"
+
+[[regions.fields]]
+id = "p4_chs_first"
+label = "CHS First Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of first sector"
+
+[[regions.fields]]
+id = "p4_type"
+label = "Partition Type"
+field_type = "u8"
+length = 1
+description = "Filesystem or partition type identifier"
+
+[regions.fields.enum_values]
+"0" = "Empty"
+"1" = "FAT12"
+"4" = "FAT16 (<32 MB)"
+"5" = "Extended"
+"6" = "FAT16B (>32 MB)"
+"7" = "NTFS/exFAT"
+"11" = "FAT32"
+"12" = "FAT32 LBA"
+"14" = "FAT16 LBA"
+"15" = "Extended LBA"
+"130" = "Linux swap"
+"131" = "Linux"
+"133" = "Linux extended"
+"142" = "Linux LVM"
+"238" = "GPT protective"
+"239" = "EFI System"
+
+[[regions.fields]]
+id = "p4_chs_last"
+label = "CHS Last Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of last sector"
+
+[[regions.fields]]
+id = "p4_lba_first"
+label = "LBA First Sector"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Logical block address of first sector"
+
+[[regions.fields]]
+id = "p4_sector_count"
+label = "Sector Count"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Total number of sectors in partition"
+
+[[regions]]
+id = "boot_signature"
+label = "Boot Signature"
+color = "#E74C3C"
+offset = 510
+length = 2
+group = "mbr"
+description = "Magic number 0x55AA indicating valid boot sector"
+
+[[regions.fields]]
+id = "signature"
+label = "Boot Signature"
+field_type = "bytes"
+length = 2
+role = "magic"
+description = "Must be 0x55 0xAA for a valid MBR"

@@ -1,0 +1,112 @@
+name = "JPEG"
+description = "JPEG image with JFIF APP0 segment"
+extensions = ["jpg", "jpeg"]
+magic = "FFD8FFE0"
+magic_offset = 0
+endian = "big"
+
+[[regions]]
+id = "soi"
+label = "SOI Marker"
+color = "#E74C3C"
+offset = 0
+length = 2
+group = "header"
+description = "Start of Image marker (FF D8)"
+
+[[regions.fields]]
+id = "soi_marker"
+label = "Marker"
+field_type = "bytes"
+length = 2
+role = "magic"
+description = "FF D8"
+
+[[regions]]
+id = "app0"
+label = "APP0 / JFIF Segment"
+color = "#3498DB"
+offset = 2
+length = 18
+group = "header"
+description = "JFIF application segment with image metadata"
+
+[[regions.fields]]
+id = "app0_marker"
+label = "Marker"
+field_type = "bytes"
+length = 2
+role = "magic"
+description = "FF E0"
+
+[[regions.fields]]
+id = "app0_length"
+label = "Segment Length"
+field_type = "u16_be"
+length = 2
+role = "size"
+description = "Length of segment data (including this field, excluding marker)"
+
+[[regions.fields]]
+id = "identifier"
+label = "Identifier"
+field_type = "ascii"
+length = 5
+role = "magic"
+description = "JFIF\\0"
+
+[[regions.fields]]
+id = "version_major"
+label = "Version Major"
+field_type = "u8"
+length = 1
+role = "version"
+description = "JFIF major version (usually 1)"
+
+[[regions.fields]]
+id = "version_minor"
+label = "Version Minor"
+field_type = "u8"
+length = 1
+role = "version"
+description = "JFIF minor version (00, 01, or 02)"
+
+[[regions.fields]]
+id = "density_units"
+label = "Density Units"
+field_type = "u8"
+length = 1
+description = "0=no units, 1=pixels/inch, 2=pixels/cm"
+
+[regions.fields.enum_values]
+"0" = "No Units (aspect ratio only)"
+"1" = "Pixels per Inch"
+"2" = "Pixels per Centimeter"
+
+[[regions.fields]]
+id = "x_density"
+label = "X Density"
+field_type = "u16_be"
+length = 2
+description = "Horizontal pixel density"
+
+[[regions.fields]]
+id = "y_density"
+label = "Y Density"
+field_type = "u16_be"
+length = 2
+description = "Vertical pixel density"
+
+[[regions.fields]]
+id = "thumbnail_width"
+label = "Thumbnail Width"
+field_type = "u8"
+length = 1
+description = "Thumbnail width (0 = no thumbnail)"
+
+[[regions.fields]]
+id = "thumbnail_height"
+label = "Thumbnail Height"
+field_type = "u8"
+length = 1
+description = "Thumbnail height (0 = no thumbnail)"

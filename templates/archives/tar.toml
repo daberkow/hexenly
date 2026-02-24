@@ -1,0 +1,149 @@
+name = "TAR"
+description = "TAR archive — USTAR format header block"
+extensions = ["tar"]
+magic = "7573746172"
+magic_offset = 257
+endian = "big"
+
+[[regions]]
+id = "file_header"
+label = "File Header Block"
+color = "#E67E22"
+offset = 0
+length = 512
+group = "entry"
+description = "USTAR file header (512-byte block)"
+
+[[regions.fields]]
+id = "name"
+label = "Filename"
+field_type = "ascii"
+length = 100
+description = "Name of the archived file (null-terminated)"
+
+[[regions.fields]]
+id = "mode"
+label = "File Mode"
+field_type = "ascii"
+length = 8
+description = "File permissions in octal ASCII (e.g. 0000755)"
+
+[[regions.fields]]
+id = "uid"
+label = "Owner UID"
+field_type = "ascii"
+length = 8
+description = "Owner user ID in octal ASCII"
+
+[[regions.fields]]
+id = "gid"
+label = "Group GID"
+field_type = "ascii"
+length = 8
+description = "Owner group ID in octal ASCII"
+
+[[regions.fields]]
+id = "size"
+label = "File Size"
+field_type = "ascii"
+length = 12
+role = "size"
+description = "File size in bytes as octal ASCII"
+
+[[regions.fields]]
+id = "mtime"
+label = "Modification Time"
+field_type = "ascii"
+length = 12
+description = "Last modification time in Unix epoch octal ASCII"
+
+[[regions.fields]]
+id = "checksum"
+label = "Checksum"
+field_type = "ascii"
+length = 8
+role = "checksum"
+description = "Header checksum in octal ASCII"
+
+[[regions.fields]]
+id = "typeflag"
+label = "Type Flag"
+field_type = "ascii"
+length = 1
+description = "Entry type indicator"
+
+[regions.fields.enum_values]
+"48" = "Regular File (0)"
+"49" = "Hard Link (1)"
+"50" = "Symbolic Link (2)"
+"51" = "Character Device (3)"
+"52" = "Block Device (4)"
+"53" = "Directory (5)"
+"54" = "FIFO (6)"
+"55" = "Reserved (7)"
+
+[[regions.fields]]
+id = "linkname"
+label = "Link Name"
+field_type = "ascii"
+length = 100
+description = "Name of linked file (for hard/symlinks)"
+
+[[regions.fields]]
+id = "magic"
+label = "USTAR Magic"
+field_type = "ascii"
+length = 6
+role = "magic"
+description = "ustar\\0 (75 73 74 61 72 00)"
+
+[[regions.fields]]
+id = "version"
+label = "Version"
+field_type = "ascii"
+length = 2
+role = "version"
+description = "USTAR version (00)"
+
+[[regions.fields]]
+id = "uname"
+label = "Owner Name"
+field_type = "ascii"
+length = 32
+description = "Owner user name"
+
+[[regions.fields]]
+id = "gname"
+label = "Group Name"
+field_type = "ascii"
+length = 32
+description = "Owner group name"
+
+[[regions.fields]]
+id = "devmajor"
+label = "Device Major"
+field_type = "ascii"
+length = 8
+description = "Major device number in octal ASCII"
+
+[[regions.fields]]
+id = "devminor"
+label = "Device Minor"
+field_type = "ascii"
+length = 8
+description = "Minor device number in octal ASCII"
+
+[[regions.fields]]
+id = "prefix"
+label = "Filename Prefix"
+field_type = "ascii"
+length = 155
+description = "Prefix for long filenames (prepended to name)"
+
+[[regions.fields]]
+id = "header_padding"
+label = "Padding"
+field_type = "bytes"
+length = 12
+role = "padding"
+description = "Padding to fill 512-byte block"

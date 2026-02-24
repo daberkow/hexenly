@@ -61,7 +61,7 @@ You can also just drag and drop a file onto the window.
 - Save and Save As with atomic writes
 
 **Templates**
-- 7 built-in templates: PNG, BMP, ELF, ZIP, ISO 9660, FAT32, Cybiko CFS
+- 15 built-in templates across images, archives, executables, filesystems, and media
 - Auto-detection via magic bytes or file extension
 - Structure panel with decoded field values — click any field to jump to its offset
 - Color-coded hex overlay showing which bytes belong to which region
@@ -81,6 +81,31 @@ You can also just drag and drop a file onto the window.
 | `Ctrl+A` | Select all |
 | `Insert` | Toggle insert/overwrite mode |
 | `Esc` | Close dialog |
+
+## Built-in Templates
+
+| Format | Coverage |
+|--------|----------|
+| **Images** | |
+| PNG | Signature + IHDR chunk |
+| BMP | File header + DIB header |
+| GIF | Header + logical screen descriptor |
+| JPEG | SOI marker + APP0/JFIF segment |
+| **Archives** | |
+| ZIP | Local file entries (repeating, dynamic field lengths) |
+| TAR | USTAR file header block |
+| GZIP | Header with flags and OS identification |
+| **Executables** | |
+| ELF | Identification + 64-bit header |
+| PE/COFF | DOS header + PE signature + COFF + optional header |
+| **Filesystems** | |
+| FAT32 | Boot sector + BPB + FSInfo |
+| ISO 9660 | Primary volume descriptor + path table |
+| MBR | Boot code + 4 partition entries + signature |
+| GPT | GPT header + first partition entry |
+| Cybiko CFS | Xtreme flash filesystem (boot blocks + file pages) |
+| **Media** | |
+| WAV | RIFF header + format chunk + data chunk |
 
 ## Writing Templates
 

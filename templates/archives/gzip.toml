@@ -1,0 +1,98 @@
+name = "GZIP"
+description = "GZIP compressed file (RFC 1952)"
+extensions = ["gz", "gzip"]
+magic = "1F8B"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "header"
+label = "GZIP Header"
+color = "#3498DB"
+offset = 0
+length = 10
+group = "header"
+description = "Fixed 10-byte GZIP member header"
+
+[[regions.fields]]
+id = "magic1"
+label = "Magic Byte 1"
+field_type = "u8"
+length = 1
+role = "magic"
+description = "0x1F — first identification byte"
+
+[[regions.fields]]
+id = "magic2"
+label = "Magic Byte 2"
+field_type = "u8"
+length = 1
+role = "magic"
+description = "0x8B — second identification byte"
+
+[[regions.fields]]
+id = "compression_method"
+label = "Compression Method"
+field_type = "u8"
+length = 1
+description = "Compression algorithm used"
+
+[regions.fields.enum_values]
+"8" = "Deflate"
+
+[[regions.fields]]
+id = "flags"
+label = "Flags"
+field_type = "u8"
+length = 1
+description = "Header flags indicating optional fields"
+
+[regions.fields.bit_flags]
+"0" = "FTEXT"
+"1" = "FHCRC"
+"2" = "FEXTRA"
+"3" = "FNAME"
+"4" = "FCOMMENT"
+
+[[regions.fields]]
+id = "mtime"
+label = "Modification Time"
+field_type = "u32_le"
+length = 4
+description = "Unix timestamp of original file modification time"
+
+[[regions.fields]]
+id = "xfl"
+label = "Extra Flags"
+field_type = "u8"
+length = 1
+description = "Compression-specific flags (2=best compression, 4=fastest)"
+
+[regions.fields.enum_values]
+"0" = "Default"
+"2" = "Best Compression"
+"4" = "Fastest"
+
+[[regions.fields]]
+id = "os"
+label = "Operating System"
+field_type = "u8"
+length = 1
+description = "OS on which compression took place"
+
+[regions.fields.enum_values]
+"0" = "FAT (DOS, OS/2, NT/Win32)"
+"1" = "Amiga"
+"2" = "VMS"
+"3" = "Unix"
+"4" = "VM/CMS"
+"5" = "Atari TOS"
+"6" = "HPFS (OS/2, NT)"
+"7" = "Macintosh"
+"8" = "Z-System"
+"9" = "CP/M"
+"10" = "TOPS-20"
+"11" = "NTFS (NT)"
+"12" = "QDOS"
+"13" = "Acorn RISCOS"
+"255" = "Unknown"
