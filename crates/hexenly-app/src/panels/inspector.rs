@@ -1,9 +1,9 @@
-use egui::{Color32, Grid, RichText, ScrollArea, Ui};
+use egui::{Grid, RichText, ScrollArea, Ui};
 use hexenly_core::ByteInterpreter;
 
-use crate::theme::monospace_font;
+use crate::theme::{HexColors, monospace_font};
 
-pub fn show(ui: &mut Ui, data: &[u8], cursor: usize) {
+pub fn show(ui: &mut Ui, data: &[u8], cursor: usize, colors: &HexColors) {
     ui.heading("Inspector");
     ui.separator();
 
@@ -42,9 +42,9 @@ pub fn show(ui: &mut Ui, data: &[u8], cursor: usize) {
             let set = (interp.byte >> bit) & 1 == 1;
             let text = if set { "1" } else { "0" };
             let color = if set {
-                Color32::from_rgb(120, 200, 120)
+                colors.bit_set
             } else {
-                Color32::from_gray(100)
+                colors.bit_unset
             };
             ui.label(RichText::new(text).font(monospace_font()).color(color));
         }

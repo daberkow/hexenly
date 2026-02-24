@@ -12,6 +12,7 @@ use crate::panels::hex_view::{self, HexPane, HexViewAction, HexViewState};
 use crate::panels::inspector;
 use crate::panels::structure::{self, StructureAction};
 use crate::panels::templates::{self, TemplateBrowserAction};
+use crate::theme::{HexColors, ThemeMode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextEncoding {
@@ -67,6 +68,8 @@ pub struct HexenlyApp {
 
     hex_view_state: HexViewState,
     theme_applied: bool,
+    theme_mode: ThemeMode,
+    hex_colors: HexColors,
 
     // File to open on first frame (from CLI args)
     pending_open: Option<String>,
@@ -170,6 +173,8 @@ impl HexenlyApp {
             replace_input: String::new(),
             hex_view_state: HexViewState::default(),
             theme_applied: false,
+            theme_mode: ThemeMode::Dark,
+            hex_colors: HexColors::dark(),
             pending_open: path,
             show_template_browser: false,
             show_structure_panel: false,
@@ -1182,6 +1187,26 @@ impl HexenlyApp {
                         ui.close();
                     }
                 });
+                ui.menu_button("Theme", |ui| {
+                    if ui
+                        .selectable_label(self.theme_mode == ThemeMode::Dark, "Dark")
+                        .clicked()
+                    {
+                        self.theme_mode = ThemeMode::Dark;
+                        self.hex_colors = HexColors::dark();
+                        self.theme_applied = false;
+                        ui.close();
+                    }
+                    if ui
+                        .selectable_label(self.theme_mode == ThemeMode::Light, "Light")
+                        .clicked()
+                    {
+                        self.theme_mode = ThemeMode::Light;
+                        self.hex_colors = HexColors::light();
+                        self.theme_applied = false;
+                        ui.close();
+                    }
+                });
                 ui.separator();
                 if ui
                     .selectable_label(self.show_ascii_pane, "ASCII Pane")
@@ -1404,7 +1429,7 @@ impl HexenlyApp {
 impl App for HexenlyApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if !self.theme_applied {
-            crate::theme::apply_theme(ctx);
+            crate::theme::apply_theme(ctx, self.theme_mode);
             self.theme_applied = true;
         }
 
@@ -1558,7 +1583,7 @@ impl App for HexenlyApp {
                 .default_width(260.0)
                 .show(ctx, |ui| {
                     if let Some(data) = self.data_bytes() {
-                        inspector::show(ui, data, self.cursor_offset);
+                        inspector::show(ui, data, self.cursor_offset, &self.hex_colors);
                     } else {
                         ui.label("No file open");
                     }
@@ -1605,6 +1630,7 @@ impl App for HexenlyApp {
                     self.resolved_template.as_ref(),
                     self.nibble_high,
                     self.edit_focus,
+                    &self.hex_colors,
                 );
                 match action {
                     Some(HexViewAction::SetCursor(off, pane)) if off < data_len => {

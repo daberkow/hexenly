@@ -26,6 +26,7 @@ pub fn show(
     template_overlay: Option<&ResolvedTemplate>,
     nibble_high: bool,
     edit_focus: HexPane,
+    colors: &HexColors,
 ) -> Option<HexViewAction> {
     let mut action = None;
     let font = monospace_font();
@@ -84,7 +85,7 @@ pub fn show(
                     egui::Align2::LEFT_TOP,
                     &offset_text,
                     font.clone(),
-                    HexColors::OFFSET_COLUMN,
+                    colors.offset_column,
                 );
 
                 let hex_x_start = origin.x + offset_width;
@@ -133,8 +134,8 @@ pub fn show(
                     let is_search_hit = search_matches.contains(&byte_offset);
 
                     if is_cursor {
-                        painter.rect_filled(hex_rect, 0.0, HexColors::CURSOR_BG);
-                        painter.rect_stroke(hex_rect, 0.0, Stroke::new(1.0, HexColors::CURSOR_BORDER), StrokeKind::Inside);
+                        painter.rect_filled(hex_rect, 0.0, colors.cursor_bg);
+                        painter.rect_stroke(hex_rect, 0.0, Stroke::new(1.0, colors.cursor_border), StrokeKind::Inside);
                         if edit_focus == HexPane::Hex {
                             let nibble_x = if nibble_high {
                                 hex_x_start + col as f32 * hex_col_width
@@ -147,17 +148,17 @@ pub fn show(
                                     Pos2::new(nibble_x, underline_y),
                                     Pos2::new(nibble_x + char_width, underline_y),
                                 ],
-                                Stroke::new(2.0, HexColors::CURSOR_BORDER),
+                                Stroke::new(2.0, colors.cursor_border),
                             );
                         }
                     } else if is_selected {
-                        painter.rect_filled(hex_rect, 0.0, HexColors::SELECTION_BG);
+                        painter.rect_filled(hex_rect, 0.0, colors.selection_bg);
                     } else if is_search_hit {
-                        painter.rect_filled(hex_rect, 0.0, HexColors::SEARCH_HIGHLIGHT);
+                        painter.rect_filled(hex_rect, 0.0, colors.search_highlight);
                     }
 
                     // --- Hex byte text ---
-                    let color = byte_color(byte);
+                    let color = byte_color(byte, colors);
                     let hex_text = format!("{:02X}", byte);
                     painter.text(
                         Pos2::new(hex_x_start + col as f32 * hex_col_width, y),
@@ -174,10 +175,10 @@ pub fn show(
                             Vec2::new(char_width, line_height),
                         );
                         if is_cursor {
-                            painter.rect_filled(ascii_rect, 0.0, HexColors::CURSOR_BG);
-                            painter.rect_stroke(ascii_rect, 0.0, Stroke::new(1.0, HexColors::CURSOR_BORDER), StrokeKind::Inside);
+                            painter.rect_filled(ascii_rect, 0.0, colors.cursor_bg);
+                            painter.rect_stroke(ascii_rect, 0.0, Stroke::new(1.0, colors.cursor_border), StrokeKind::Inside);
                         } else if is_selected {
-                            painter.rect_filled(ascii_rect, 0.0, HexColors::SELECTION_BG);
+                            painter.rect_filled(ascii_rect, 0.0, colors.selection_bg);
                         }
 
                         let ch = if (0x20..=0x7E).contains(&byte) {
@@ -190,7 +191,7 @@ pub fn show(
                             egui::Align2::LEFT_TOP,
                             ch.to_string(),
                             font.clone(),
-                            HexColors::ASCII_PANE,
+                            colors.ascii_pane,
                         );
                     }
                 }
@@ -316,12 +317,12 @@ fn pos_to_offset(
     None
 }
 
-fn byte_color(byte: u8) -> Color32 {
+fn byte_color(byte: u8, colors: &HexColors) -> Color32 {
     match classify_byte(byte) {
-        ByteClass::Null => HexColors::NULL_BYTE,
-        ByteClass::MaxByte => HexColors::MAX_BYTE,
-        ByteClass::PrintableAscii => HexColors::PRINTABLE_ASCII,
-        ByteClass::Other => HexColors::DEFAULT_BYTE,
+        ByteClass::Null => colors.null_byte,
+        ByteClass::MaxByte => colors.max_byte,
+        ByteClass::PrintableAscii => colors.printable_ascii,
+        ByteClass::Other => colors.default_byte,
     }
 }
 
