@@ -1,0 +1,325 @@
+name = "PE"
+description = "PE/COFF Windows executable (Portable Executable)"
+extensions = ["exe", "dll", "sys"]
+magic = "4D5A"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "dos_header"
+label = "DOS Header"
+color = "#E74C3C"
+offset = 0
+length = 64
+group = "header"
+description = "MS-DOS stub header (IMAGE_DOS_HEADER)"
+
+[[regions.fields]]
+id = "e_magic"
+label = "Magic"
+field_type = "ascii"
+length = 2
+role = "magic"
+description = "4D 5A (MZ)"
+
+[[regions.fields]]
+id = "e_cblp"
+label = "Bytes on Last Page"
+field_type = "u16_le"
+length = 2
+description = "Bytes on last page of file"
+
+[[regions.fields]]
+id = "e_cp"
+label = "Pages in File"
+field_type = "u16_le"
+length = 2
+description = "Pages in file (512-byte pages)"
+
+[[regions.fields]]
+id = "e_crlc"
+label = "Relocations"
+field_type = "u16_le"
+length = 2
+role = "count"
+description = "Number of relocations"
+
+[[regions.fields]]
+id = "e_cparhdr"
+label = "Header Paragraphs"
+field_type = "u16_le"
+length = 2
+role = "size"
+description = "Size of header in paragraphs (16-byte units)"
+
+[[regions.fields]]
+id = "e_minalloc"
+label = "Min Extra Paragraphs"
+field_type = "u16_le"
+length = 2
+description = "Minimum extra paragraphs needed"
+
+[[regions.fields]]
+id = "e_maxalloc"
+label = "Max Extra Paragraphs"
+field_type = "u16_le"
+length = 2
+description = "Maximum extra paragraphs needed"
+
+[[regions.fields]]
+id = "e_ss"
+label = "Initial SS"
+field_type = "u16_le"
+length = 2
+description = "Initial (relative) SS value"
+
+[[regions.fields]]
+id = "e_sp"
+label = "Initial SP"
+field_type = "u16_le"
+length = 2
+description = "Initial SP value"
+
+[[regions.fields]]
+id = "e_csum"
+label = "Checksum"
+field_type = "u16_le"
+length = 2
+role = "checksum"
+
+[[regions.fields]]
+id = "e_ip"
+label = "Initial IP"
+field_type = "u16_le"
+length = 2
+description = "Initial IP value"
+
+[[regions.fields]]
+id = "e_cs"
+label = "Initial CS"
+field_type = "u16_le"
+length = 2
+description = "Initial (relative) CS value"
+
+[[regions.fields]]
+id = "e_lfarlc"
+label = "Relocation Table Offset"
+field_type = "u16_le"
+length = 2
+role = "offset"
+description = "File address of relocation table"
+
+[[regions.fields]]
+id = "e_ovno"
+label = "Overlay Number"
+field_type = "u16_le"
+length = 2
+
+[[regions.fields]]
+id = "e_res"
+label = "Reserved"
+field_type = "bytes"
+length = 8
+role = "reserved"
+
+[[regions.fields]]
+id = "e_oemid"
+label = "OEM Identifier"
+field_type = "u16_le"
+length = 2
+
+[[regions.fields]]
+id = "e_oeminfo"
+label = "OEM Info"
+field_type = "u16_le"
+length = 2
+
+[[regions.fields]]
+id = "e_res2"
+label = "Reserved 2"
+field_type = "bytes"
+length = 20
+role = "reserved"
+
+[[regions.fields]]
+id = "e_lfanew"
+label = "PE Header Offset"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "File offset to PE signature (typically 0x80)"
+
+[[regions]]
+id = "pe_signature"
+label = "PE Signature"
+color = "#9B59B6"
+offset = "from:e_lfanew"
+length = 4
+group = "header"
+description = "PE signature at offset specified by e_lfanew"
+
+[[regions.fields]]
+id = "pe_sig"
+label = "Signature"
+field_type = "bytes"
+length = 4
+role = "magic"
+description = "50 45 00 00 (PE\\0\\0)"
+
+[[regions]]
+id = "coff_header"
+label = "COFF Header"
+color = "#3498DB"
+offset = "after:pe_signature"
+length = 20
+group = "header"
+description = "IMAGE_FILE_HEADER — COFF file header"
+
+[[regions.fields]]
+id = "machine"
+label = "Machine"
+field_type = "u16_le"
+length = 2
+description = "Target machine architecture"
+
+[regions.fields.enum_values]
+"0" = "Unknown"
+"332" = "x86 (i386)"
+"34404" = "x64 (AMD64)"
+"448" = "ARM"
+"43620" = "ARM64 (AArch64)"
+"496" = "Thumb (ARM)"
+"512" = "IA-64 (Itanium)"
+
+[[regions.fields]]
+id = "number_of_sections"
+label = "Number of Sections"
+field_type = "u16_le"
+length = 2
+role = "count"
+description = "Number of section entries in the section table"
+
+[[regions.fields]]
+id = "time_date_stamp"
+label = "Timestamp"
+field_type = "u32_le"
+length = 4
+description = "Unix timestamp when the file was created"
+
+[[regions.fields]]
+id = "pointer_to_symbol_table"
+label = "Symbol Table Pointer"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "File offset of the COFF symbol table (0 if none)"
+
+[[regions.fields]]
+id = "number_of_symbols"
+label = "Number of Symbols"
+field_type = "u32_le"
+length = 4
+role = "count"
+description = "Number of entries in the symbol table"
+
+[[regions.fields]]
+id = "size_of_optional_header"
+label = "Optional Header Size"
+field_type = "u16_le"
+length = 2
+role = "size"
+description = "Size of the optional header (0 for object files)"
+
+[[regions.fields]]
+id = "characteristics"
+label = "Characteristics"
+field_type = "u16_le"
+length = 2
+description = "Flags indicating file attributes"
+
+[regions.fields.bit_flags]
+"0" = "RELOCS_STRIPPED"
+"1" = "EXECUTABLE_IMAGE"
+"2" = "LINE_NUMS_STRIPPED"
+"3" = "LOCAL_SYMS_STRIPPED"
+"5" = "LARGE_ADDRESS_AWARE"
+"8" = "32BIT_MACHINE"
+"9" = "DEBUG_STRIPPED"
+"10" = "REMOVABLE_RUN_FROM_SWAP"
+"11" = "NET_RUN_FROM_SWAP"
+"12" = "SYSTEM"
+"13" = "DLL"
+"14" = "UP_SYSTEM_ONLY"
+
+[[regions]]
+id = "optional_header"
+label = "Optional Header"
+color = "#2ECC71"
+offset = "after:coff_header"
+length = 28
+group = "header"
+description = "IMAGE_OPTIONAL_HEADER — first part (standard fields)"
+
+[[regions.fields]]
+id = "oh_magic"
+label = "Magic"
+field_type = "u16_le"
+length = 2
+role = "magic"
+description = "PE format: 0x10B=PE32, 0x20B=PE32+"
+
+[regions.fields.enum_values]
+"267" = "PE32"
+"523" = "PE32+"
+
+[[regions.fields]]
+id = "major_linker_version"
+label = "Major Linker Version"
+field_type = "u8"
+length = 1
+role = "version"
+
+[[regions.fields]]
+id = "minor_linker_version"
+label = "Minor Linker Version"
+field_type = "u8"
+length = 1
+role = "version"
+
+[[regions.fields]]
+id = "size_of_code"
+label = "Size of Code"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Total size of all code sections"
+
+[[regions.fields]]
+id = "size_of_initialized_data"
+label = "Size of Initialized Data"
+field_type = "u32_le"
+length = 4
+role = "size"
+
+[[regions.fields]]
+id = "size_of_uninitialized_data"
+label = "Size of Uninitialized Data"
+field_type = "u32_le"
+length = 4
+role = "size"
+
+[[regions.fields]]
+id = "address_of_entry_point"
+label = "Entry Point RVA"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Relative virtual address of entry point"
+
+[[regions.fields]]
+id = "base_of_code"
+label = "Base of Code"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "RVA of the beginning of the code section"

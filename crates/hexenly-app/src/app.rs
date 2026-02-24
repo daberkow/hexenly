@@ -129,6 +129,46 @@ impl HexenlyApp {
             "Cybiko CFS",
             include_str!("../../../templates/filesystems/cybiko-cfs.toml"),
         );
+        registry.load_builtin(
+            "filesystems",
+            "MBR",
+            include_str!("../../../templates/filesystems/mbr.toml"),
+        );
+        registry.load_builtin(
+            "filesystems",
+            "GPT",
+            include_str!("../../../templates/filesystems/gpt.toml"),
+        );
+        registry.load_builtin(
+            "images",
+            "GIF",
+            include_str!("../../../templates/images/gif.toml"),
+        );
+        registry.load_builtin(
+            "images",
+            "JPEG",
+            include_str!("../../../templates/images/jpeg.toml"),
+        );
+        registry.load_builtin(
+            "media",
+            "WAV",
+            include_str!("../../../templates/media/wav.toml"),
+        );
+        registry.load_builtin(
+            "executables",
+            "PE",
+            include_str!("../../../templates/executables/pe.toml"),
+        );
+        registry.load_builtin(
+            "archives",
+            "TAR",
+            include_str!("../../../templates/archives/tar.toml"),
+        );
+        registry.load_builtin(
+            "archives",
+            "GZIP",
+            include_str!("../../../templates/archives/gzip.toml"),
+        );
 
         let mut notifications = Vec::new();
         for (name, err) in &registry.load_errors {
