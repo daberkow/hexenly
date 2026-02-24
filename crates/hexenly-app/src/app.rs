@@ -79,6 +79,11 @@ pub struct HexenlyApp {
     // Bookmarks
     show_bookmarks: bool,
     bookmarks: Vec<Bookmark>,
+
+    /// True = waiting for high nibble (first digit), false = waiting for low nibble.
+    nibble_high: bool,
+    /// Which pane has edit focus for keyboard input.
+    edit_focus: HexPane,
 }
 
 impl HexenlyApp {
@@ -161,6 +166,8 @@ impl HexenlyApp {
             notifications,
             show_bookmarks: false,
             bookmarks: Vec::new(),
+            nibble_high: true,
+            edit_focus: HexPane::Hex,
         }
     }
 
@@ -191,6 +198,7 @@ impl HexenlyApp {
                 self.edit_buffer = Some(EditBuffer::from_file(file_ref));
                 self.cursor_offset = 0;
                 self.selection = None;
+                self.nibble_high = true;
                 self.search_matches.clear();
                 self.search_match_idx = None;
                 self.active_template_index = None;
@@ -411,6 +419,7 @@ impl HexenlyApp {
         self.cursor_offset = new_offset;
         self.selection = None;
         self.selection_anchor = None;
+        self.nibble_high = true;
         self.scroll_to_cursor();
     }
 
@@ -423,6 +432,7 @@ impl HexenlyApp {
         self.cursor_offset = offset.min(len - 1);
         self.selection = None;
         self.selection_anchor = None;
+        self.nibble_high = true;
         self.scroll_to_cursor();
     }
 
@@ -441,6 +451,7 @@ impl HexenlyApp {
             self.cursor_offset = self.cursor_offset.saturating_add(delta as usize).min(max);
         }
         self.selection = Some(Selection::new(anchor, self.cursor_offset));
+        self.nibble_high = true;
         self.scroll_to_cursor();
     }
 
@@ -454,6 +465,7 @@ impl HexenlyApp {
         self.selection_anchor = Some(anchor);
         self.cursor_offset = offset.min(len.saturating_sub(1));
         self.selection = Some(Selection::new(anchor, self.cursor_offset));
+        self.nibble_high = true;
         self.scroll_to_cursor();
     }
 
@@ -486,7 +498,7 @@ impl HexenlyApp {
             ctrl_end: bool,
         }
 
-        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark) = ctx.input_mut(|i| {
+        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace) = ctx.input_mut(|i| {
             // Ctrl+Shift+S must be consumed BEFORE Ctrl+S
             let save_as = i.consume_key(
                 egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
@@ -558,6 +570,9 @@ impl HexenlyApp {
             let shift_home = i.consume_key(egui::Modifiers::SHIFT, Key::Home);
             let shift_end = i.consume_key(egui::Modifiers::SHIFT, Key::End);
 
+            let delete = i.consume_key(egui::Modifiers::NONE, Key::Delete);
+            let backspace = i.consume_key(egui::Modifiers::NONE, Key::Backspace);
+
             let nav = NavKeys {
                 left,
                 right,
@@ -584,7 +599,7 @@ impl HexenlyApp {
                 ctrl_end: shift_ctrl_end,
             };
 
-            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark)
+            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace)
         });
 
         if open {
@@ -665,6 +680,11 @@ impl HexenlyApp {
             self.set_cursor_abs(off);
         }
 
+        // Delete / Backspace
+        if (delete || backspace) && self.edit_buffer.is_some() {
+            self.handle_delete(delete);
+        }
+
         // Keyboard navigation (only when data is available)
         if self.data_len() > 0 {
             let data_len = self.data_len();
@@ -738,6 +758,154 @@ impl HexenlyApp {
                 self.set_cursor_select(data_len.saturating_sub(1));
             }
         }
+    }
+
+    fn handle_edit_input(&mut self, ctx: &Context) {
+        let Some(buf) = &self.edit_buffer else { return };
+        if buf.is_empty() {
+            return;
+        }
+
+        // Collect text events (typed characters)
+        let typed_chars: Vec<char> = ctx.input(|i| {
+            i.events
+                .iter()
+                .filter_map(|e| {
+                    if let egui::Event::Text(s) = e {
+                        s.chars().next()
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        });
+
+        for ch in typed_chars {
+            match self.edit_focus {
+                HexPane::Hex => self.handle_hex_input(ch),
+                HexPane::Ascii => self.handle_ascii_input(ch),
+            }
+        }
+    }
+
+    fn handle_hex_input(&mut self, ch: char) {
+        let Some(digit) = ch.to_digit(16) else { return };
+        let digit = digit as u8;
+        let Some(buf) = &mut self.edit_buffer else { return };
+
+        // If selection exists, delete it first (insert mode) or start from selection start
+        if let Some(sel) = self.selection.take() {
+            if buf.mode() == EditMode::Insert {
+                buf.delete_range(sel.start, sel.end);
+            }
+            self.cursor_offset = sel.start.min(buf.len().saturating_sub(1));
+            self.selection_anchor = None;
+            self.nibble_high = true;
+        }
+
+        let offset = self.cursor_offset;
+
+        if buf.mode() == EditMode::Insert && self.nibble_high {
+            // Insert a new 0x00 byte, then we'll set the high nibble
+            buf.insert_byte(offset, 0x00);
+        }
+
+        if offset >= buf.len() {
+            return;
+        }
+        let current = buf.data()[offset];
+        let new_byte = if self.nibble_high {
+            (digit << 4) | (current & 0x0F)
+        } else {
+            (current & 0xF0) | digit
+        };
+        buf.overwrite_byte(offset, new_byte);
+
+        if self.nibble_high {
+            self.nibble_high = false;
+        } else {
+            self.nibble_high = true;
+            // Advance cursor
+            let max = buf.len().saturating_sub(1);
+            if self.cursor_offset < max {
+                self.cursor_offset += 1;
+            }
+        }
+    }
+
+    fn handle_ascii_input(&mut self, ch: char) {
+        if !ch.is_ascii() || ch.is_ascii_control() {
+            return;
+        }
+        let Some(buf) = &mut self.edit_buffer else { return };
+
+        // If selection exists, delete it first (insert mode) or start from selection start
+        if let Some(sel) = self.selection.take() {
+            if buf.mode() == EditMode::Insert {
+                buf.delete_range(sel.start, sel.end);
+            }
+            self.cursor_offset = sel.start.min(buf.len().saturating_sub(1));
+            self.selection_anchor = None;
+        }
+
+        let offset = self.cursor_offset;
+
+        if buf.mode() == EditMode::Insert {
+            buf.insert_byte(offset, ch as u8);
+        } else {
+            buf.overwrite_byte(offset, ch as u8);
+        }
+
+        // Advance cursor
+        let max = buf.len().saturating_sub(1);
+        if self.cursor_offset < max {
+            self.cursor_offset += 1;
+        }
+        self.nibble_high = true;
+    }
+
+    fn handle_delete(&mut self, is_forward: bool) {
+        let Some(buf) = &mut self.edit_buffer else { return };
+        if buf.is_empty() {
+            return;
+        }
+
+        // If there's a selection, operate on the range
+        if let Some(sel) = self.selection.take() {
+            if buf.mode() == EditMode::Insert {
+                buf.delete_range(sel.start, sel.end);
+                self.cursor_offset = sel.start.min(buf.len().saturating_sub(1));
+            } else {
+                // Overwrite mode: zero the selected bytes
+                let zeros = vec![0u8; sel.len()];
+                buf.overwrite_range(sel.start, &zeros);
+                self.cursor_offset = sel.start;
+            }
+            self.selection_anchor = None;
+            self.nibble_high = true;
+            return;
+        }
+
+        // No selection -- single byte operation
+        if buf.mode() == EditMode::Insert {
+            if is_forward {
+                // Delete key: remove byte at cursor
+                buf.delete_byte(self.cursor_offset);
+                if self.cursor_offset >= buf.len() && !buf.is_empty() {
+                    self.cursor_offset = buf.len() - 1;
+                }
+            } else {
+                // Backspace: remove byte before cursor
+                if self.cursor_offset > 0 {
+                    self.cursor_offset -= 1;
+                    buf.delete_byte(self.cursor_offset);
+                }
+            }
+        } else {
+            // Overwrite mode: zero the byte
+            buf.overwrite_byte(self.cursor_offset, 0x00);
+        }
+        self.nibble_high = true;
     }
 
     fn selected_bytes(&self) -> Option<&[u8]> {
@@ -1123,6 +1291,11 @@ impl App for HexenlyApp {
 
         self.handle_shortcuts(ctx);
 
+        // Only process edit input when not in a text input mode
+        if !self.show_search && !self.show_goto {
+            self.handle_edit_input(ctx);
+        }
+
         // Top menu bar
         TopBottomPanel::top("menubar").show(ctx, |ui| {
             self.show_menu_bar(ui);
@@ -1275,10 +1448,12 @@ impl App for HexenlyApp {
                     self.resolved_template.as_ref(),
                 );
                 match action {
-                    Some(HexViewAction::SetCursor(off)) if off < data_len => {
+                    Some(HexViewAction::SetCursor(off, pane)) if off < data_len => {
                         self.cursor_offset = off;
                         self.selection = None;
                         self.selection_anchor = None;
+                        self.edit_focus = pane;
+                        self.nibble_high = true;
                     }
                     Some(HexViewAction::Select { start, end, pane }) => {
                         let max = data_len.saturating_sub(1);
@@ -1287,6 +1462,8 @@ impl App for HexenlyApp {
                         self.cursor_offset = e;
                         self.selection = Some(Selection::new(s, e));
                         self.selection_pane = pane;
+                        self.edit_focus = pane;
+                        self.nibble_high = true;
                     }
                     _ => {}
                 }

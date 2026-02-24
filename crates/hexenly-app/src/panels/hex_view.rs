@@ -213,9 +213,9 @@ pub fn show(
             // Handle click (no drag) — set cursor, clear selection
             if response.clicked()
                 && let Some(pos) = response.interact_pointer_pos()
-                && let Some((offset, _pane)) = hit(pos)
+                && let Some((offset, pane)) = hit(pos)
             {
-                action = Some(HexViewAction::SetCursor(offset));
+                action = Some(HexViewAction::SetCursor(offset, pane));
             }
 
             // Handle drag — select byte range
@@ -316,6 +316,6 @@ pub enum HexPane {
 
 #[derive(Debug)]
 pub enum HexViewAction {
-    SetCursor(usize),
+    SetCursor(usize, HexPane),
     Select { start: usize, end: usize, pane: HexPane },
 }
