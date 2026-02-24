@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use eframe::App;
 use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TopBottomPanel};
-use hexenly_core::{Bookmark, EditBuffer, HexFile, SearchPattern, Selection, find_all};
+use hexenly_core::{Bookmark, EditBuffer, EditMode, HexFile, SearchPattern, Selection, find_all};
 use hexenly_templates::engine::{self, ResolveResult};
 use hexenly_templates::loader::TemplateRegistry;
 use hexenly_templates::resolved::ResolvedTemplate;
@@ -1032,7 +1032,8 @@ impl HexenlyApp {
         });
     }
 
-    fn show_status_bar(&self, ui: &mut egui::Ui) {
+    fn show_status_bar(&mut self, ui: &mut egui::Ui) {
+        let mut toggle_mode = false;
         ui.horizontal(|ui| {
             if let Some(file) = &self.file {
                 let name = file
@@ -1040,10 +1041,35 @@ impl HexenlyApp {
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| "unknown".into());
-                ui.label(RichText::new(&name).strong());
+                let dirty = self
+                    .edit_buffer
+                    .as_ref()
+                    .is_some_and(|b| b.is_dirty());
+                let display_name = if dirty {
+                    format!("{name} *")
+                } else {
+                    name
+                };
+                ui.label(RichText::new(&display_name).strong());
                 ui.label(RichText::new(format_size(self.data_len())).weak());
 
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                    if let Some(buf) = &self.edit_buffer {
+                        let mode_text = match buf.mode() {
+                            EditMode::Overwrite => "OVR",
+                            EditMode::Insert => "INS",
+                        };
+                        if ui
+                            .add(
+                                egui::Button::new(RichText::new(mode_text).monospace())
+                                    .frame(false),
+                            )
+                            .clicked()
+                        {
+                            toggle_mode = true;
+                        }
+                        ui.separator();
+                    }
                     if let Some(resolved) = &self.resolved_template {
                         ui.label(&resolved.name);
                         ui.label(RichText::new("Template:").weak());
@@ -1067,6 +1093,11 @@ impl HexenlyApp {
                 ui.label("No file open \u{2014} Ctrl+O to open");
             }
         });
+        if toggle_mode
+            && let Some(buf) = &mut self.edit_buffer
+        {
+            buf.toggle_mode();
+        }
     }
 }
 
