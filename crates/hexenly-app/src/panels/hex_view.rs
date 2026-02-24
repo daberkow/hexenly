@@ -24,6 +24,8 @@ pub fn show(
     show_ascii: bool,
     state: &mut HexViewState,
     template_overlay: Option<&ResolvedTemplate>,
+    nibble_high: bool,
+    edit_focus: HexPane,
 ) -> Option<HexViewAction> {
     let mut action = None;
     let font = monospace_font();
@@ -133,6 +135,21 @@ pub fn show(
                     if is_cursor {
                         painter.rect_filled(hex_rect, 0.0, HexColors::CURSOR_BG);
                         painter.rect_stroke(hex_rect, 0.0, Stroke::new(1.0, HexColors::CURSOR_BORDER), StrokeKind::Inside);
+                        if edit_focus == HexPane::Hex {
+                            let nibble_x = if nibble_high {
+                                hex_x_start + col as f32 * hex_col_width
+                            } else {
+                                hex_x_start + col as f32 * hex_col_width + char_width
+                            };
+                            let underline_y = y + row_height;
+                            painter.line_segment(
+                                [
+                                    Pos2::new(nibble_x, underline_y),
+                                    Pos2::new(nibble_x + char_width, underline_y),
+                                ],
+                                Stroke::new(2.0, HexColors::CURSOR_BORDER),
+                            );
+                        }
                     } else if is_selected {
                         painter.rect_filled(hex_rect, 0.0, HexColors::SELECTION_BG);
                     } else if is_search_hit {

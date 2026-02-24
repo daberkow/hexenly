@@ -1446,6 +1446,8 @@ impl App for HexenlyApp {
                     self.show_ascii_pane,
                     &mut self.hex_view_state,
                     self.resolved_template.as_ref(),
+                    self.nibble_high,
+                    self.edit_focus,
                 );
                 match action {
                     Some(HexViewAction::SetCursor(off, pane)) if off < data_len => {

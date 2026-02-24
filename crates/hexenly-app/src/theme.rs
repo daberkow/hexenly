@@ -13,6 +13,8 @@ impl HexColors {
     pub const ASCII_PANE: Color32 = Color32::from_rgb(170, 170, 140);
     pub const CURSOR_BG: Color32 = Color32::from_rgb(96, 128, 192);
     pub const CURSOR_BORDER: Color32 = Color32::from_rgb(140, 170, 220);
+    #[allow(dead_code)] // reserved for future modified-byte highlighting
+    pub const MODIFIED_BYTE: Color32 = Color32::from_rgb(255, 200, 80);
 }
 
 pub fn monospace_font() -> FontId {
