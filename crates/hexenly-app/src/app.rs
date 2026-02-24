@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use eframe::App;
 use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TopBottomPanel};
-use hexenly_core::{Bookmark, HexFile, SearchPattern, Selection, find_all};
+use hexenly_core::{Bookmark, EditBuffer, HexFile, SearchPattern, Selection, find_all};
 use hexenly_templates::engine::{self, ResolveResult};
 use hexenly_templates::loader::TemplateRegistry;
 use hexenly_templates::resolved::ResolvedTemplate;
@@ -36,6 +36,7 @@ const NOTIFICATION_DURATION_SECS: f32 = 5.0;
 
 pub struct HexenlyApp {
     file: Option<HexFile>,
+    edit_buffer: Option<EditBuffer>,
     cursor_offset: usize,
     selection: Option<Selection>,
     selection_anchor: Option<usize>,
@@ -128,6 +129,7 @@ impl HexenlyApp {
 
         Self {
             file: None,
+            edit_buffer: None,
             cursor_offset: 0,
             selection: None,
             selection_anchor: None,
@@ -172,6 +174,21 @@ impl HexenlyApp {
         match HexFile::open(path) {
             Ok(f) => {
                 self.file = Some(f);
+                let file_ref = self.file.as_ref().unwrap();
+
+                // Warn if file is larger than 100 MB
+                const LARGE_FILE_THRESHOLD: usize = 100 * 1024 * 1024;
+                if file_ref.len() > LARGE_FILE_THRESHOLD {
+                    let size_str = format_size(file_ref.len());
+                    tracing::warn!("Large file ({size_str}) — editing buffer may use significant memory");
+                    self.notifications.push(Notification {
+                        message: format!("Large file ({size_str}) — editing buffer may use significant memory"),
+                        level: NotificationLevel::Warning,
+                        created: Instant::now(),
+                    });
+                }
+
+                self.edit_buffer = Some(EditBuffer::from_file(file_ref));
                 self.cursor_offset = 0;
                 self.selection = None;
                 self.search_matches.clear();
@@ -189,9 +206,24 @@ impl HexenlyApp {
         }
     }
 
+    fn data_bytes(&self) -> Option<&[u8]> {
+        if let Some(buf) = &self.edit_buffer {
+            Some(buf.data())
+        } else {
+            self.file.as_ref().map(|f| f.as_bytes())
+        }
+    }
+
+    fn data_len(&self) -> usize {
+        self.edit_buffer
+            .as_ref()
+            .map(|b| b.len())
+            .or_else(|| self.file.as_ref().map(|f| f.len()))
+            .unwrap_or(0)
+    }
+
     fn auto_detect_template(&mut self, path: &std::path::Path) {
-        let Some(file) = &self.file else { return };
-        let bytes = file.as_bytes();
+        let Some(bytes) = self.data_bytes() else { return };
 
         // Try magic bytes first
         let matches = self.template_registry.detect_for_file(bytes);
@@ -228,7 +260,7 @@ impl HexenlyApp {
     }
 
     fn resolve_active_template(&mut self) {
-        let Some(file) = &self.file else {
+        let Some(data) = self.data_bytes() else {
             self.resolved_template = None;
             return;
         };
@@ -241,7 +273,7 @@ impl HexenlyApp {
             return;
         };
 
-        let result: ResolveResult = engine::resolve(&entry.template, file.as_bytes());
+        let result: ResolveResult = engine::resolve(&entry.template, data);
 
         for warning in &result.warnings {
             tracing::warn!("Template resolve: {warning}");
@@ -257,7 +289,7 @@ impl HexenlyApp {
 
     fn do_search(&mut self) {
         self.search_error = None;
-        let Some(file) = &self.file else { return };
+        let Some(data) = self.data_bytes() else { return };
         let pattern = if self.search_hex_mode {
             match SearchPattern::from_hex_string(&self.search_input) {
                 Some(p) => p,
@@ -270,7 +302,7 @@ impl HexenlyApp {
             SearchPattern::from_text(&self.search_input)
         };
 
-        self.search_matches = find_all(file.as_bytes(), &pattern, 10_000);
+        self.search_matches = find_all(data, &pattern, 10_000);
         if let Some(&first) = self.search_matches.first() {
             self.search_match_idx = Some(0);
             self.cursor_offset = first;
@@ -315,9 +347,10 @@ impl HexenlyApp {
         } else {
             text.parse::<usize>().ok()
         };
+        let len = self.data_len();
         if let Some(off) = offset
-            && let Some(file) = &self.file
-            && off < file.len()
+            && len > 0
+            && off < len
         {
             self.cursor_offset = off;
             self.selection = None;
@@ -365,11 +398,11 @@ impl HexenlyApp {
 
     /// Move cursor by a signed delta, clamping to valid range.
     fn move_cursor(&mut self, delta: isize) {
-        let Some(file) = &self.file else { return };
-        if file.is_empty() {
+        let len = self.data_len();
+        if len == 0 {
             return;
         }
-        let max = file.len() - 1;
+        let max = len - 1;
         let new_offset = if delta < 0 {
             self.cursor_offset.saturating_sub(delta.unsigned_abs())
         } else {
@@ -383,11 +416,11 @@ impl HexenlyApp {
 
     /// Set cursor to an absolute offset, clamping to valid range.
     fn set_cursor_abs(&mut self, offset: usize) {
-        let Some(file) = &self.file else { return };
-        if file.is_empty() {
+        let len = self.data_len();
+        if len == 0 {
             return;
         }
-        self.cursor_offset = offset.min(file.len() - 1);
+        self.cursor_offset = offset.min(len - 1);
         self.selection = None;
         self.selection_anchor = None;
         self.scroll_to_cursor();
@@ -395,11 +428,11 @@ impl HexenlyApp {
 
     /// Move cursor by a signed delta, extending the selection from the anchor.
     fn move_cursor_select(&mut self, delta: isize) {
-        let Some(file) = &self.file else { return };
-        if file.is_empty() {
+        let len = self.data_len();
+        if len == 0 {
             return;
         }
-        let max = file.len().saturating_sub(1);
+        let max = len.saturating_sub(1);
         let anchor = self.selection_anchor.unwrap_or(self.cursor_offset);
         self.selection_anchor = Some(anchor);
         if delta < 0 {
@@ -413,13 +446,13 @@ impl HexenlyApp {
 
     /// Set cursor to an absolute offset, extending the selection from the anchor.
     fn set_cursor_select(&mut self, offset: usize) {
-        let Some(file) = &self.file else { return };
-        if file.is_empty() {
+        let len = self.data_len();
+        if len == 0 {
             return;
         }
         let anchor = self.selection_anchor.unwrap_or(self.cursor_offset);
         self.selection_anchor = Some(anchor);
-        self.cursor_offset = offset.min(file.len().saturating_sub(1));
+        self.cursor_offset = offset.min(len.saturating_sub(1));
         self.selection = Some(Selection::new(anchor, self.cursor_offset));
         self.scroll_to_cursor();
     }
@@ -589,8 +622,10 @@ impl HexenlyApp {
             self.set_cursor_abs(off);
         }
 
-        // Keyboard navigation (only when a file is open)
-        if self.file.is_some() {
+        // Keyboard navigation (only when data is available)
+        if self.data_len() > 0 {
+            let data_len = self.data_len();
+
             if nav.left {
                 self.move_cursor(-1);
             }
@@ -613,20 +648,16 @@ impl HexenlyApp {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
                 self.set_cursor_abs(row_start);
             }
-            if nav.end
-                && let Some(file) = &self.file
-            {
+            if nav.end {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
-                let row_end = (row_start + self.columns - 1).min(file.len().saturating_sub(1));
+                let row_end = (row_start + self.columns - 1).min(data_len.saturating_sub(1));
                 self.set_cursor_abs(row_end);
             }
             if nav.ctrl_home {
                 self.set_cursor_abs(0);
             }
-            if nav.ctrl_end
-                && let Some(file) = &self.file
-            {
-                self.set_cursor_abs(file.len().saturating_sub(1));
+            if nav.ctrl_end {
+                self.set_cursor_abs(data_len.saturating_sub(1));
             }
 
             // Shift+key selection
@@ -652,27 +683,23 @@ impl HexenlyApp {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
                 self.set_cursor_select(row_start);
             }
-            if shift_nav.end
-                && let Some(file) = &self.file
-            {
+            if shift_nav.end {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
-                let row_end = (row_start + self.columns - 1).min(file.len().saturating_sub(1));
+                let row_end = (row_start + self.columns - 1).min(data_len.saturating_sub(1));
                 self.set_cursor_select(row_end);
             }
             if shift_nav.ctrl_home {
                 self.set_cursor_select(0);
             }
-            if shift_nav.ctrl_end
-                && let Some(file) = &self.file
-            {
-                self.set_cursor_select(file.len().saturating_sub(1));
+            if shift_nav.ctrl_end {
+                self.set_cursor_select(data_len.saturating_sub(1));
             }
         }
     }
 
     fn selected_bytes(&self) -> Option<&[u8]> {
         let sel = self.selection.as_ref()?;
-        let bytes = self.file.as_ref()?.as_bytes();
+        let bytes = self.data_bytes()?;
         let start = sel.start.min(bytes.len());
         let end = (sel.end + 1).min(bytes.len());
         Some(&bytes[start..end])
@@ -818,7 +845,7 @@ impl HexenlyApp {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| "unknown".into());
                 ui.label(RichText::new(&name).strong());
-                ui.label(RichText::new(format_size(file.len())).weak());
+                ui.label(RichText::new(format_size(self.data_len())).weak());
 
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                     if let Some(resolved) = &self.resolved_template {
@@ -965,8 +992,8 @@ impl App for HexenlyApp {
             SidePanel::right("inspector")
                 .default_width(220.0)
                 .show(ctx, |ui| {
-                    if let Some(file) = &self.file {
-                        inspector::show(ui, file, self.cursor_offset);
+                    if let Some(data) = self.data_bytes() {
+                        inspector::show(ui, data, self.cursor_offset);
                     } else {
                         ui.label("No file open");
                     }
@@ -993,10 +1020,17 @@ impl App for HexenlyApp {
                 self.columns = cols.clamp(8, 128);
             }
 
-            if let Some(file) = &self.file {
+            let data: Option<&[u8]> = if let Some(buf) = &self.edit_buffer {
+                Some(buf.data())
+            } else {
+                self.file.as_ref().map(|f| f.as_bytes())
+            };
+            let data_len = data.map(|d| d.len()).unwrap_or(0);
+            if let Some(data) = data {
                 let action = hex_view::show(
                     ui,
-                    file,
+                    data,
+                    data_len,
                     self.columns,
                     self.cursor_offset,
                     self.selection.as_ref(),
@@ -1006,13 +1040,13 @@ impl App for HexenlyApp {
                     self.resolved_template.as_ref(),
                 );
                 match action {
-                    Some(HexViewAction::SetCursor(off)) if off < file.len() => {
+                    Some(HexViewAction::SetCursor(off)) if off < data_len => {
                         self.cursor_offset = off;
                         self.selection = None;
                         self.selection_anchor = None;
                     }
                     Some(HexViewAction::Select { start, end, pane }) => {
-                        let max = file.len().saturating_sub(1);
+                        let max = data_len.saturating_sub(1);
                         let s = start.min(max);
                         let e = end.min(max);
                         self.cursor_offset = e;

@@ -1,5 +1,5 @@
 use egui::{Color32, Pos2, Rect, ScrollArea, Sense, Stroke, StrokeKind, Ui, Vec2};
-use hexenly_core::{ByteClass, HexFile, Selection, classify_byte};
+use hexenly_core::{ByteClass, Selection, classify_byte};
 use hexenly_templates::resolved::ResolvedTemplate;
 
 use crate::theme::{HexColors, annotation_font, monospace_font};
@@ -15,7 +15,8 @@ pub struct HexViewState {
 #[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut Ui,
-    file: &HexFile,
+    data: &[u8],
+    total_len: usize,
     columns: usize,
     cursor: usize,
     selection: Option<&Selection>,
@@ -45,7 +46,7 @@ pub fn show(
     };
     let total_row_width = offset_width + hex_total_width + ascii_width + char_width;
 
-    let row_count = file.row_count(columns);
+    let row_count = total_len.div_ceil(columns);
 
     let scroll_to = state.scroll_to_row.take();
 
@@ -67,7 +68,12 @@ pub fn show(
             for (visual_idx, row) in row_range.clone().enumerate() {
                 let y = origin.y + visual_idx as f32 * line_height;
                 let row_offset = row * columns;
-                let row_bytes = file.read_row(row, columns);
+                let row_end = (row_offset + columns).min(data.len());
+                let row_bytes = if row_offset < data.len() {
+                    &data[row_offset..row_end]
+                } else {
+                    &[]
+                };
 
                 // --- Offset gutter ---
                 let offset_text = format!("{:08X}:", row_offset);
