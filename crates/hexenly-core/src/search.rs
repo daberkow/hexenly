@@ -7,7 +7,7 @@ pub enum SearchPattern {
 impl SearchPattern {
     pub fn from_hex_string(s: &str) -> Option<Self> {
         let hex: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-        if hex.len() % 2 != 0 {
+        if !hex.len().is_multiple_of(2) {
             return None;
         }
         let bytes: Result<Vec<u8>, _> = (0..hex.len())
