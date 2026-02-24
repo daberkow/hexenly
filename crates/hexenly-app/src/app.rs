@@ -124,6 +124,11 @@ impl HexenlyApp {
             "FAT32",
             include_str!("../../../templates/filesystems/fat32.toml"),
         );
+        registry.load_builtin(
+            "filesystems",
+            "Cybiko CFS",
+            include_str!("../../../templates/filesystems/cybiko-cfs.toml"),
+        );
 
         let mut notifications = Vec::new();
         for (name, err) in &registry.load_errors {

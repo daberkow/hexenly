@@ -1278,4 +1278,96 @@ mod tests {
             "2057 [Encrypted, Data Descriptor, UTF-8]"
         );
     }
+
+    #[test]
+    fn test_cybiko_cfs_template() {
+        // Parse the actual CFS template from TOML
+        let toml_str = include_str!("../../../templates/filesystems/cybiko-cfs.toml");
+        let template = crate::parser::parse_template_str(toml_str).expect("CFS template should parse");
+
+        assert_eq!(template.name, "Cybiko CFS (Xtreme)");
+
+        // Build a synthetic CFS image: 5 boot pages + 3 file pages
+        const PAGE_SIZE: usize = 258;
+        let mut image = vec![0xFFu8; 5 * PAGE_SIZE + 3 * PAGE_SIZE];
+
+        // Page 5 (offset 1290): first block of a file (part_id = 0)
+        let page5 = 5 * PAGE_SIZE;
+        image[page5] = 0x00; // CRC16 high
+        image[page5 + 1] = 0x00; // CRC16 low
+        image[page5 + 2] = 0x80; // flags: BLOCK_USED
+        image[page5 + 3] = 5; // data_size: 5 bytes
+        image[page5 + 4] = 0x00; // file_id high
+        image[page5 + 5] = 0x00; // file_id low = 0
+        image[page5 + 6] = 0x00; // part_id high
+        image[page5 + 7] = 0x00; // part_id low = 0
+        image[page5 + 8] = 0x20; // type_marker: first block
+        // filename at page5+9..page5+76 (67 bytes)
+        let name = b"test.app\0";
+        image[page5 + 9..page5 + 9 + name.len()].copy_from_slice(name);
+        // timestamp at page5+76..page5+80
+        image[page5 + 76] = 0x5A;
+        image[page5 + 77] = 0x34;
+        image[page5 + 78] = 0x5A;
+        image[page5 + 79] = 0xBC;
+        // file data at page5+80..page5+258 (178 bytes) - leave as 0xFF
+
+        // Page 6 (offset 1548): continuation block (part_id = 1)
+        let page6 = 6 * PAGE_SIZE;
+        image[page6] = 0x00;
+        image[page6 + 1] = 0x00;
+        image[page6 + 2] = 0x80; // BLOCK_USED
+        image[page6 + 3] = 3; // data_size
+        image[page6 + 4] = 0x00;
+        image[page6 + 5] = 0x00; // file_id = 0
+        image[page6 + 6] = 0x00;
+        image[page6 + 7] = 0x01; // part_id = 1
+        // data at page6+8..page6+258 (250 bytes) - leave as 0xFF
+
+        // Page 7 (offset 1806): unused block
+        let page7 = 7 * PAGE_SIZE;
+        // All 0xFF from init, but clear bit 7 of flags
+        image[page7 + 2] = 0x7F; // flags: unused
+
+        let result = resolve(&template, &image);
+
+        // Should have: boot region + 3 file page iterations
+        assert_eq!(result.template.regions.len(), 4);
+
+        // Boot region
+        assert_eq!(result.template.regions[0].id, "boot");
+        assert_eq!(result.template.regions[0].offset, 0);
+        assert_eq!(result.template.regions[0].length, 1290);
+
+        // First file page (part 0): should have all header fields
+        let page5_region = &result.template.regions[1];
+        assert_eq!(page5_region.offset, 1290);
+        // Fields: crc, flags, data_size, file_id, part_id, type_marker, filename, timestamp, first_block_data
+        // (cont_block_data skipped because part_id == 0)
+        assert_eq!(page5_region.fields.len(), 9);
+        // Repeating regions suffix field IDs with .N (iteration index)
+        assert!(page5_region.fields[0].id.starts_with("page_crc"));
+        assert!(page5_region.fields[4].id.starts_with("part_id"));
+        assert_eq!(page5_region.fields[4].display_value, "0");
+        assert!(page5_region.fields[5].id.starts_with("type_marker"));
+        assert_eq!(page5_region.fields[5].display_value, "32 (File Entry)");
+        assert!(page5_region.fields[6].id.starts_with("filename"));
+        assert!(page5_region.fields[8].id.starts_with("first_block_data"));
+
+        // Continuation page (part 1): should skip first-block fields, show cont data
+        let page6_region = &result.template.regions[2];
+        assert_eq!(page6_region.offset, 1548);
+        // Fields: crc, flags, data_size, file_id, part_id, cont_block_data
+        // (type_marker, filename, timestamp, first_block_data skipped because part_id != 0)
+        assert_eq!(page6_region.fields.len(), 6);
+        assert!(page6_region.fields[4].id.starts_with("part_id"));
+        assert_eq!(page6_region.fields[4].display_value, "1");
+        assert!(page6_region.fields[5].id.starts_with("cont_block_data"));
+
+        // Unused page (part_id = 0xFFFF): should show cont data (part_id != 0)
+        let page7_region = &result.template.regions[3];
+        assert_eq!(page7_region.offset, 1806);
+        assert_eq!(page7_region.fields.len(), 6);
+        assert!(page7_region.fields[5].id.starts_with("cont_block_data"));
+    }
 }
