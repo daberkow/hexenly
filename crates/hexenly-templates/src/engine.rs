@@ -726,7 +726,7 @@ mod tests {
             offset: None,
             role: None,
             description: None,
-            size_target: None,
+
             condition: None,
             enum_values: None,
             bit_flags: None,
@@ -1369,5 +1369,102 @@ mod tests {
         assert_eq!(page7_region.offset, 1806);
         assert_eq!(page7_region.fields.len(), 6);
         assert!(page7_region.fields[5].id.starts_with("cont_block_data"));
+    }
+
+    #[test]
+    fn test_repeat_until_magic() {
+        // Region repeats until sentinel bytes "DEAD" are found
+        let template = make_template(vec![Region {
+            repeat: Some(RepeatMode::UntilMagic),
+            repeat_until: Some("DEAD".into()),
+            ..make_region(
+                "entry",
+                OffsetExpr::Absolute(0),
+                vec![make_field("val", FieldType::U16Le, LengthExpr::Fixed(2))],
+            )
+        }]);
+
+        // Three u16le values followed by sentinel 0xDE 0xAD
+        let file_bytes = [0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0xDE, 0xAD];
+        let result = resolve(&template, &file_bytes);
+
+        // Should produce 3 iterations, stopping before the sentinel
+        assert_eq!(result.template.regions.len(), 3);
+        assert_eq!(result.template.regions[0].offset, 0);
+        assert_eq!(result.template.regions[1].offset, 2);
+        assert_eq!(result.template.regions[2].offset, 4);
+        assert_eq!(result.template.regions[0].fields[0].display_value, "1");
+        assert_eq!(result.template.regions[1].fields[0].display_value, "2");
+        assert_eq!(result.template.regions[2].fields[0].display_value, "3");
+    }
+
+    #[test]
+    fn test_arith_expr_sub() {
+        // total_size=10, header_size=3 => payload length = 10 - 3 = 7
+        let template = make_template(vec![
+            make_region(
+                "header",
+                OffsetExpr::Absolute(0),
+                vec![
+                    make_field("total_size", FieldType::U8, LengthExpr::Fixed(1)),
+                    make_field("header_size", FieldType::U8, LengthExpr::Fixed(1)),
+                ],
+            ),
+            make_region(
+                "data",
+                OffsetExpr::Absolute(2),
+                vec![Field {
+                    length: LengthExpr::Expr(ArithExpr {
+                        left: Operand::FieldRef("total_size".into()),
+                        op: ArithOp::Sub,
+                        right: Operand::FieldRef("header_size".into()),
+                    }),
+                    ..make_field("payload", FieldType::Bytes, LengthExpr::Fixed(0))
+                }],
+            ),
+        ]);
+
+        let mut file_bytes = vec![10, 3]; // total_size=10, header_size=3
+        file_bytes.extend(vec![0xBB; 7]); // 7 bytes payload
+
+        let result = resolve(&template, &file_bytes);
+        assert_eq!(result.template.regions[1].fields[0].length, 7);
+        assert_eq!(result.template.regions[1].fields[0].raw_bytes, vec![0xBB; 7]);
+    }
+
+    #[test]
+    fn test_length_to_end() {
+        // Field with ToEnd length should consume all remaining bytes
+        let template = make_template(vec![make_region(
+            "data",
+            OffsetExpr::Absolute(4),
+            vec![make_field("rest", FieldType::Bytes, LengthExpr::ToEnd)],
+        )]);
+
+        let file_bytes = [0x00, 0x01, 0x02, 0x03, 0xAA, 0xBB, 0xCC];
+        let result = resolve(&template, &file_bytes);
+
+        // Offset 4, file length 7 => ToEnd = 3 bytes
+        assert_eq!(result.template.regions[0].fields[0].length, 3);
+        assert_eq!(
+            result.template.regions[0].fields[0].raw_bytes,
+            &[0xAA, 0xBB, 0xCC]
+        );
+    }
+
+    #[test]
+    fn test_length_to_end_single_byte() {
+        // ToEnd with only 1 byte remaining
+        let template = make_template(vec![make_region(
+            "data",
+            OffsetExpr::Absolute(2),
+            vec![make_field("rest", FieldType::Bytes, LengthExpr::ToEnd)],
+        )]);
+
+        let file_bytes = [0x00, 0x01, 0xFE];
+        let result = resolve(&template, &file_bytes);
+
+        assert_eq!(result.template.regions[0].fields[0].length, 1);
+        assert_eq!(result.template.regions[0].fields[0].raw_bytes, &[0xFE]);
     }
 }

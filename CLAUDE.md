@@ -31,7 +31,7 @@ cargo run -p hexenly-app -- path/to/file.bin
 
 - **Phase 1** (complete): Hex viewer, mmap file reading, painter-based hex grid, byte inspector, search, go-to-offset
 - **Phase 2** (complete): Template engine — TOML parsing, resolution engine (static offsets/lengths), overlay rendering, template browser sidebar, structure map panel, auto-detection via magic bytes, 4 built-in templates
-- **Phase 3** (planned): Dynamic expressions (`AfterField`, `FromField` offsets/lengths), repeating regions, computed fields
+- **Phase 3** (complete): Dynamic expressions (`AfterField`, `FromField`, `Expr` offsets/lengths), repeating regions (`Count`, `UntilEof`, `UntilMagic`), conditional regions/fields, arithmetic expressions, enum/bitflag display, 7 built-in templates
 
 ## Template Format
 
