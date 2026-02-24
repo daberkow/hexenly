@@ -84,6 +84,9 @@ pub struct HexenlyApp {
     nibble_high: bool,
     /// Which pane has edit focus for keyboard input.
     edit_focus: HexPane,
+
+    /// When true, the next close request will not be cancelled (force quit).
+    force_closing: bool,
 }
 
 impl HexenlyApp {
@@ -168,6 +171,7 @@ impl HexenlyApp {
             bookmarks: Vec::new(),
             nibble_high: true,
             edit_focus: HexPane::Hex,
+            force_closing: false,
         }
     }
 
@@ -498,7 +502,9 @@ impl HexenlyApp {
             ctrl_end: bool,
         }
 
-        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace) = ctx.input_mut(|i| {
+        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit) = ctx.input_mut(|i| {
+            let force_quit = i.consume_key(egui::Modifiers::COMMAND, Key::Q);
+
             // Ctrl+Shift+S must be consumed BEFORE Ctrl+S
             let save_as = i.consume_key(
                 egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
@@ -599,9 +605,13 @@ impl HexenlyApp {
                 ctrl_end: shift_ctrl_end,
             };
 
-            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace)
+            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit)
         });
 
+        if force_quit {
+            self.force_closing = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         if open {
             self.open_file_dialog();
         }
@@ -1274,6 +1284,31 @@ impl App for HexenlyApp {
         if !self.theme_applied {
             crate::theme::apply_theme(ctx);
             self.theme_applied = true;
+        }
+
+        // Update window title with dirty indicator
+        let title = if let Some(file) = &self.file {
+            let name = file.path().file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unknown".into());
+            let dirty = if self.edit_buffer.as_ref().is_some_and(|b| b.is_dirty()) { " *" } else { "" };
+            format!("{name}{dirty} - Hexenly")
+        } else {
+            "Hexenly".to_string()
+        };
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+
+        // Warn before closing with unsaved changes
+        if ctx.input(|i| i.viewport().close_requested())
+            && !self.force_closing
+            && self.edit_buffer.as_ref().is_some_and(|b| b.is_dirty())
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.notifications.push(Notification {
+                message: "Unsaved changes! Save first or press Ctrl+Q to force quit.".into(),
+                level: NotificationLevel::Warning,
+                created: Instant::now(),
+            });
         }
 
         // Handle pending file open from CLI
