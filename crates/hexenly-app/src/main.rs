@@ -4,6 +4,9 @@ mod theme;
 
 use app::HexenlyApp;
 
+const WINDOW_WIDTH: f32 = 1280.0;
+const WINDOW_HEIGHT: f32 = 800.0;
+
 fn load_icon() -> egui::IconData {
     let png_bytes = include_bytes!("../../../docs/logo128.png");
     let img = image::load_from_memory(png_bytes).expect("Failed to decode icon PNG");
@@ -29,7 +32,7 @@ fn main() -> eframe::Result<()> {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1280.0, 800.0])
+            .with_inner_size([WINDOW_WIDTH, WINDOW_HEIGHT])
             .with_title("Hexenly")
             .with_icon(icon),
         ..Default::default()

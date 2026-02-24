@@ -1,4 +1,4 @@
-use egui::{RichText, ScrollArea, Ui};
+use egui::{self, RichText, ScrollArea, Ui};
 use hexenly_core::Bookmark;
 
 #[derive(Debug)]
@@ -7,6 +7,7 @@ pub enum BookmarkAction {
     GoToOffset(usize),
     Delete(usize),
     Updated, // name or note was edited, trigger save
+    Close,
 }
 
 pub fn show(
@@ -16,7 +17,14 @@ pub fn show(
 ) -> Option<BookmarkAction> {
     let mut action = None;
 
-    ui.heading("Bookmarks");
+    ui.horizontal(|ui| {
+        ui.heading("Bookmarks");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.small_button("\u{2715}").clicked() {
+                action = Some(BookmarkAction::Close);
+            }
+        });
+    });
     ui.separator();
 
     if ui.button("Add at cursor").clicked() {

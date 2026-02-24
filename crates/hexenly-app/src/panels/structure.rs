@@ -1,4 +1,4 @@
-use egui::{Color32, Grid, RichText, ScrollArea, Ui};
+use egui::{self, Color32, Grid, RichText, ScrollArea, Ui};
 use hexenly_templates::resolved::ResolvedTemplate;
 
 use crate::theme::monospace_font;
@@ -6,6 +6,7 @@ use crate::theme::monospace_font;
 #[derive(Debug)]
 pub enum StructureAction {
     GoToOffset(usize),
+    Close,
 }
 
 pub fn show(
@@ -18,6 +19,11 @@ pub fn show(
     ui.horizontal(|ui| {
         ui.heading("Structure");
         ui.label(RichText::new(&resolved.name).strong());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.small_button("\u{2715}").clicked() {
+                action = Some(StructureAction::Close);
+            }
+        });
     });
     ui.separator();
 

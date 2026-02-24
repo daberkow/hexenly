@@ -1,10 +1,11 @@
-use egui::{RichText, ScrollArea, Ui};
+use egui::{self, RichText, ScrollArea, Ui};
 use hexenly_templates::loader::TemplateRegistry;
 
 #[derive(Debug)]
 pub enum TemplateBrowserAction {
     Select(usize),
     Deselect,
+    Close,
 }
 
 pub fn show(
@@ -15,7 +16,14 @@ pub fn show(
 ) -> Option<TemplateBrowserAction> {
     let mut action = None;
 
-    ui.heading("Templates");
+    ui.horizontal(|ui| {
+        ui.heading("Templates");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.small_button("\u{2715}").clicked() {
+                action = Some(TemplateBrowserAction::Close);
+            }
+        });
+    });
     ui.separator();
 
     // Search filter

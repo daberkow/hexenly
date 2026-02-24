@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Instant;
 
 use eframe::App;
@@ -34,6 +35,52 @@ struct Notification {
 }
 
 const NOTIFICATION_DURATION_SECS: f32 = 5.0;
+const DEFAULT_COLUMNS: usize = 16;
+const PAGE_SCROLL_ROWS: usize = 16;
+const MAX_SEARCH_RESULTS: usize = 10_000;
+const MAX_RECENT_FILES: usize = 10;
+
+struct PanelVisibility {
+    inspector: bool,
+    ascii_pane: bool,
+    goto: bool,
+    search: bool,
+    replace: bool,
+    template_browser: bool,
+    structure: bool,
+    bookmarks: bool,
+}
+
+impl Default for PanelVisibility {
+    fn default() -> Self {
+        Self {
+            inspector: true,
+            ascii_pane: true,
+            goto: false,
+            search: false,
+            replace: false,
+            template_browser: false,
+            structure: false,
+            bookmarks: false,
+        }
+    }
+}
+
+#[derive(Default)]
+struct SearchState {
+    input: String,
+    hex_mode: bool,
+    matches: Vec<usize>,
+    match_idx: Option<usize>,
+    error: Option<String>,
+    replace_input: String,
+    focus: bool,
+}
+
+#[derive(Default)]
+struct GotoState {
+    input: String,
+}
 
 pub struct HexenlyApp {
     file: Option<HexFile>,
@@ -45,26 +92,11 @@ pub struct HexenlyApp {
     pending_copy: bool,
     columns: usize,
     auto_columns: bool,
-    show_inspector: bool,
-    show_ascii_pane: bool,
     text_encoding: TextEncoding,
 
-    // Go-to-offset dialog
-    show_goto: bool,
-    goto_input: String,
-
-    // Search state
-    show_search: bool,
-    focus_search: bool,
-    search_input: String,
-    search_hex_mode: bool,
-    search_matches: Vec<usize>,
-    search_match_idx: Option<usize>,
-    search_error: Option<String>,
-
-    // Replace state
-    show_replace: bool,
-    replace_input: String,
+    panels: PanelVisibility,
+    search: SearchState,
+    goto: GotoState,
 
     hex_view_state: HexViewState,
     theme_applied: bool,
@@ -75,17 +107,14 @@ pub struct HexenlyApp {
     pending_open: Option<String>,
 
     // Template state
-    show_template_browser: bool,
-    show_structure_panel: bool,
     template_registry: TemplateRegistry,
     active_template_index: Option<usize>,
     resolved_template: Option<ResolvedTemplate>,
     template_filter: String,
     notifications: Vec<Notification>,
 
-    // Bookmarks
-    show_bookmarks: bool,
     bookmarks: Vec<Bookmark>,
+    recent_files: Vec<PathBuf>,
 
     /// True = waiting for high nibble (first digit), false = waiting for low nibble.
     nibble_high: bool,
@@ -195,36 +224,24 @@ impl HexenlyApp {
             selection_anchor: None,
             selection_pane: HexPane::Hex,
             pending_copy: false,
-            columns: 16,
+            columns: DEFAULT_COLUMNS,
             auto_columns: true,
-            show_inspector: true,
-            show_ascii_pane: true,
             text_encoding: TextEncoding::Ascii,
-            show_goto: false,
-            goto_input: String::new(),
-            show_search: false,
-            focus_search: false,
-            search_input: String::new(),
-            search_hex_mode: false,
-            search_matches: Vec::new(),
-            search_match_idx: None,
-            search_error: None,
-            show_replace: false,
-            replace_input: String::new(),
+            panels: PanelVisibility::default(),
+            search: SearchState::default(),
+            goto: GotoState::default(),
             hex_view_state: HexViewState::default(),
             theme_applied: false,
             theme_mode: ThemeMode::Dark,
             hex_colors: HexColors::dark(),
             pending_open: path,
-            show_template_browser: false,
-            show_structure_panel: false,
             template_registry: registry,
             active_template_index: None,
             resolved_template: None,
             template_filter: String::new(),
             notifications,
-            show_bookmarks: false,
             bookmarks: Vec::new(),
+            recent_files: load_recent_files(),
             nibble_high: true,
             edit_focus: HexPane::Hex,
             force_closing: false,
@@ -259,11 +276,18 @@ impl HexenlyApp {
                 self.cursor_offset = 0;
                 self.selection = None;
                 self.nibble_high = true;
-                self.search_matches.clear();
-                self.search_match_idx = None;
+                self.search.matches.clear();
+                self.search.match_idx = None;
                 self.active_template_index = None;
                 self.resolved_template = None;
                 self.bookmarks = load_bookmarks(path);
+
+                // Track in recent files
+                let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                self.recent_files.retain(|p| p != &canonical);
+                self.recent_files.insert(0, canonical);
+                self.recent_files.truncate(MAX_RECENT_FILES);
+                save_recent_files(&self.recent_files);
 
                 // Auto-detect template
                 self.auto_detect_template(path);
@@ -304,7 +328,7 @@ impl HexenlyApp {
             if let Some(idx) = idx {
                 self.active_template_index = Some(idx);
                 self.resolve_active_template();
-                self.show_structure_panel = true;
+                self.panels.structure = true;
                 return;
             }
         }
@@ -321,10 +345,14 @@ impl HexenlyApp {
                 if let Some(idx) = idx {
                     self.active_template_index = Some(idx);
                     self.resolve_active_template();
-                    self.show_structure_panel = true;
+                    self.panels.structure = true;
+                    return;
                 }
             }
         }
+
+        // No template matched — open the template browser so the user can pick one
+        self.panels.template_browser = true;
     }
 
     fn resolve_active_template(&mut self) {
@@ -356,78 +384,81 @@ impl HexenlyApp {
     }
 
     fn do_search(&mut self) {
-        self.search_error = None;
+        self.search.error = None;
         let Some(data) = self.data_bytes() else { return };
-        let pattern = if self.search_hex_mode {
-            match SearchPattern::from_hex_string(&self.search_input) {
+        let pattern = if self.search.hex_mode {
+            match SearchPattern::from_hex_string(&self.search.input) {
                 Some(p) => p,
                 None => {
-                    self.search_error = Some("Invalid hex pattern".into());
+                    self.search.error = Some("Invalid hex pattern".into());
                     return;
                 }
             }
         } else {
-            SearchPattern::from_text(&self.search_input)
+            SearchPattern::from_text(&self.search.input)
         };
 
-        self.search_matches = find_all(data, &pattern, 10_000);
-        if let Some(&first) = self.search_matches.first() {
-            self.search_match_idx = Some(0);
+        self.search.matches = find_all(data, &pattern, MAX_SEARCH_RESULTS);
+        if let Some(&first) = self.search.matches.first() {
+            self.search.match_idx = Some(0);
             self.cursor_offset = first;
             self.scroll_to_cursor();
         } else {
-            self.search_match_idx = None;
+            self.search.match_idx = None;
         }
     }
 
     fn search_next(&mut self) {
-        if self.search_matches.is_empty() {
+        if self.search.matches.is_empty() {
             return;
         }
         let idx = self
-            .search_match_idx
-            .map(|i| (i + 1) % self.search_matches.len())
+            .search
+            .match_idx
+            .map(|i| (i + 1) % self.search.matches.len())
             .unwrap_or(0);
-        self.search_match_idx = Some(idx);
-        self.cursor_offset = self.search_matches[idx];
+        self.search.match_idx = Some(idx);
+        self.cursor_offset = self.search.matches[idx];
         self.scroll_to_cursor();
     }
 
     fn search_prev(&mut self) {
-        if self.search_matches.is_empty() {
+        if self.search.matches.is_empty() {
             return;
         }
-        let len = self.search_matches.len();
+        let len = self.search.matches.len();
         let idx = self
-            .search_match_idx
+            .search
+            .match_idx
             .map(|i| (i + len - 1) % len)
             .unwrap_or(len - 1);
-        self.search_match_idx = Some(idx);
-        self.cursor_offset = self.search_matches[idx];
+        self.search.match_idx = Some(idx);
+        self.cursor_offset = self.search.matches[idx];
         self.scroll_to_cursor();
     }
 
     fn build_replace_bytes(&self) -> Option<Vec<u8>> {
-        if self.search_hex_mode {
-            SearchPattern::from_hex_string(&self.replace_input).map(|p| p.as_bytes().to_vec())
+        if self.search.hex_mode {
+            SearchPattern::from_hex_string(&self.search.replace_input)
+                .map(|p| p.as_bytes().to_vec())
         } else {
-            Some(self.replace_input.as_bytes().to_vec())
+            Some(self.search.replace_input.as_bytes().to_vec())
         }
     }
 
     fn replace_current(&mut self) {
-        let Some(idx) = self.search_match_idx else { return };
-        let Some(&match_offset) = self.search_matches.get(idx) else { return };
+        let Some(idx) = self.search.match_idx else { return };
+        let Some(&match_offset) = self.search.matches.get(idx) else { return };
         let Some(replace_bytes) = self.build_replace_bytes() else { return };
         let Some(buf) = &mut self.edit_buffer else { return };
 
         // Determine the length of the search pattern
-        let old_len = if self.search_hex_mode {
-            SearchPattern::from_hex_string(&self.search_input)
+        let old_len = if self.search.hex_mode {
+            SearchPattern::from_hex_string(&self.search.input)
                 .map(|p| p.as_bytes().len())
                 .unwrap_or(0)
         } else {
-            self.search_input.len()
+            self.search.input.len()
         };
         if old_len == 0 {
             return;
@@ -449,23 +480,23 @@ impl HexenlyApp {
     fn replace_all_matches(&mut self) {
         let Some(replace_bytes) = self.build_replace_bytes() else { return };
         let Some(buf) = &mut self.edit_buffer else { return };
-        if self.search_matches.is_empty() {
+        if self.search.matches.is_empty() {
             return;
         }
 
-        let old_len = if self.search_hex_mode {
-            SearchPattern::from_hex_string(&self.search_input)
+        let old_len = if self.search.hex_mode {
+            SearchPattern::from_hex_string(&self.search.input)
                 .map(|p| p.as_bytes().len())
                 .unwrap_or(0)
         } else {
-            self.search_input.len()
+            self.search.input.len()
         };
         if old_len == 0 {
             return;
         }
 
         // Clone matches and iterate in reverse so offsets stay valid
-        let matches: Vec<usize> = self.search_matches.clone();
+        let matches: Vec<usize> = self.search.matches.clone();
         for &match_offset in matches.iter().rev() {
             buf.replace_range(match_offset, old_len, &replace_bytes);
         }
@@ -482,7 +513,7 @@ impl HexenlyApp {
     }
 
     fn goto_offset(&mut self) {
-        let text = self.goto_input.trim();
+        let text = self.goto.input.trim();
         let offset = if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X"))
         {
             usize::from_str_radix(hex, 16).ok()
@@ -498,8 +529,8 @@ impl HexenlyApp {
             self.selection = None;
             self.scroll_to_cursor();
         }
-        self.show_goto = false;
-        self.goto_input.clear();
+        self.panels.goto = false;
+        self.goto.input.clear();
     }
 
     fn show_notifications(&mut self, ctx: &egui::Context) {
@@ -773,24 +804,24 @@ impl HexenlyApp {
             buf.toggle_mode();
         }
         if goto {
-            self.show_goto = !self.show_goto;
-            self.show_search = false;
+            self.panels.goto = !self.panels.goto;
+            self.panels.search = false;
         }
         if find {
-            self.show_search = !self.show_search;
-            self.focus_search = self.show_search;
-            self.show_goto = false;
+            self.panels.search = !self.panels.search;
+            self.search.focus = self.panels.search;
+            self.panels.goto = false;
         }
         if find_replace {
-            self.show_search = true;
-            self.show_replace = true;
-            self.focus_search = true;
-            self.show_goto = false;
+            self.panels.search = true;
+            self.panels.replace = true;
+            self.search.focus = true;
+            self.panels.goto = false;
         }
         if escape {
-            self.show_goto = false;
-            self.show_search = false;
-            self.show_replace = false;
+            self.panels.goto = false;
+            self.panels.search = false;
+            self.panels.replace = false;
         }
         // copy is handled at end of update() so nothing overwrites the clipboard
         if copy && self.selection.is_some() {
@@ -813,7 +844,7 @@ impl HexenlyApp {
             if let Some(file) = &self.file {
                 save_bookmarks(file.path(), &self.bookmarks);
             }
-            self.show_bookmarks = true;
+            self.panels.bookmarks = true;
         }
         if prev_bookmark
             && let Some(bm) = self.bookmarks.iter().rev().find(|b| b.offset < self.cursor_offset)
@@ -850,10 +881,10 @@ impl HexenlyApp {
                 self.move_cursor(self.columns as isize);
             }
             if nav.page_up {
-                self.move_cursor(-((self.columns * 16) as isize));
+                self.move_cursor(-((self.columns * PAGE_SCROLL_ROWS) as isize));
             }
             if nav.page_down {
-                self.move_cursor((self.columns * 16) as isize);
+                self.move_cursor((self.columns * PAGE_SCROLL_ROWS) as isize);
             }
             if nav.home {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
@@ -885,10 +916,10 @@ impl HexenlyApp {
                 self.move_cursor_select(self.columns as isize);
             }
             if shift_nav.page_up {
-                self.move_cursor_select(-((self.columns * 16) as isize));
+                self.move_cursor_select(-((self.columns * PAGE_SCROLL_ROWS) as isize));
             }
             if shift_nav.page_down {
-                self.move_cursor_select((self.columns * 16) as isize);
+                self.move_cursor_select((self.columns * PAGE_SCROLL_ROWS) as isize);
             }
             if shift_nav.home {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
@@ -1124,6 +1155,40 @@ impl HexenlyApp {
                     ui.close();
                     self.save_file_as();
                 }
+                ui.separator();
+                ui.menu_button("Recent Files", |ui| {
+                    if self.recent_files.is_empty() {
+                        ui.add_enabled(false, egui::Label::new("No recent files"));
+                    } else {
+                        let mut open_path = None;
+                        for path in &self.recent_files {
+                            let label = path
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| path.to_string_lossy().to_string());
+                            if ui
+                                .button(&label)
+                                .on_hover_text(path.to_string_lossy())
+                                .clicked()
+                            {
+                                open_path = Some(path.clone());
+                                ui.close();
+                            }
+                        }
+                        if let Some(path) = open_path {
+                            self.open_path(&path);
+                        }
+                    }
+                });
+                ui.separator();
+                if ui
+                    .add(egui::Button::new("Exit").shortcut_text("Ctrl+Q"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.force_closing = true;
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
             });
 
             ui.menu_button("Edit", |ui| {
@@ -1157,27 +1222,27 @@ impl HexenlyApp {
                     .clicked()
                 {
                     ui.close();
-                    self.show_search = !self.show_search;
-                    self.focus_search = self.show_search;
-                    self.show_goto = false;
+                    self.panels.search = !self.panels.search;
+                    self.search.focus = self.panels.search;
+                    self.panels.goto = false;
                 }
                 if ui
                     .add(egui::Button::new("Find & Replace").shortcut_text("Ctrl+H"))
                     .clicked()
                 {
                     ui.close();
-                    self.show_search = true;
-                    self.show_replace = true;
-                    self.focus_search = true;
-                    self.show_goto = false;
+                    self.panels.search = true;
+                    self.panels.replace = true;
+                    self.search.focus = true;
+                    self.panels.goto = false;
                 }
                 if ui
                     .add(egui::Button::new("Go to Offset").shortcut_text("Ctrl+G"))
                     .clicked()
                 {
                     ui.close();
-                    self.show_goto = !self.show_goto;
-                    self.show_search = false;
+                    self.panels.goto = !self.panels.goto;
+                    self.panels.search = false;
                 }
                 ui.separator();
                 if ui
@@ -1249,38 +1314,38 @@ impl HexenlyApp {
                 });
                 ui.separator();
                 if ui
-                    .selectable_label(self.show_ascii_pane, "ASCII Pane")
+                    .selectable_label(self.panels.ascii_pane, "ASCII Pane")
                     .clicked()
                 {
-                    self.show_ascii_pane = !self.show_ascii_pane;
+                    self.panels.ascii_pane = !self.panels.ascii_pane;
                     ui.close();
                 }
                 if ui
-                    .selectable_label(self.show_inspector, "Inspector")
+                    .selectable_label(self.panels.inspector, "Inspector")
                     .clicked()
                 {
-                    self.show_inspector = !self.show_inspector;
+                    self.panels.inspector = !self.panels.inspector;
                     ui.close();
                 }
                 if ui
-                    .selectable_label(self.show_template_browser, "Templates")
+                    .selectable_label(self.panels.template_browser, "Templates")
                     .clicked()
                 {
-                    self.show_template_browser = !self.show_template_browser;
+                    self.panels.template_browser = !self.panels.template_browser;
                     ui.close();
                 }
                 if ui
-                    .selectable_label(self.show_structure_panel, "Structure")
+                    .selectable_label(self.panels.structure, "Structure")
                     .clicked()
                 {
-                    self.show_structure_panel = !self.show_structure_panel;
+                    self.panels.structure = !self.panels.structure;
                     ui.close();
                 }
                 if ui
-                    .selectable_label(self.show_bookmarks, "Bookmarks")
+                    .selectable_label(self.panels.bookmarks, "Bookmarks")
                     .clicked()
                 {
-                    self.show_bookmarks = !self.show_bookmarks;
+                    self.panels.bookmarks = !self.panels.bookmarks;
                     ui.close();
                 }
             });
@@ -1322,24 +1387,24 @@ impl HexenlyApp {
     }
 
     fn show_search_bar(&mut self, ui: &mut egui::Ui) {
-        if !self.show_search {
+        if !self.panels.search {
             return;
         }
         // Row 1: Search
         ui.horizontal(|ui| {
             ui.label("Search:");
-            let re = ui.text_edit_singleline(&mut self.search_input);
+            let re = ui.text_edit_singleline(&mut self.search.input);
             if re.changed() {
-                self.search_error = None;
+                self.search.error = None;
             }
-            if self.focus_search {
+            if self.search.focus {
                 re.request_focus();
-                self.focus_search = false;
+                self.search.focus = false;
             }
             if re.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                 self.do_search();
             }
-            ui.toggle_value(&mut self.search_hex_mode, "Hex");
+            ui.toggle_value(&mut self.search.hex_mode, "Hex");
             if ui.button("Find").clicked() {
                 self.do_search();
             }
@@ -1349,27 +1414,27 @@ impl HexenlyApp {
             if ui.button("Next").clicked() {
                 self.search_next();
             }
-            if let Some(idx) = self.search_match_idx {
+            if let Some(idx) = self.search.match_idx {
                 ui.label(format!(
                     "{}/{}",
                     idx + 1,
-                    self.search_matches.len()
+                    self.search.matches.len()
                 ));
             }
-            if let Some(err) = &self.search_error {
+            if let Some(err) = &self.search.error {
                 ui.label(RichText::new(err).color(Color32::from_rgb(220, 80, 80)));
             }
-            let replace_label = if self.show_replace { "Replace \u{25B2}" } else { "Replace \u{25BC}" };
+            let replace_label = if self.panels.replace { "Replace \u{25B2}" } else { "Replace \u{25BC}" };
             if ui.button(replace_label).clicked() {
-                self.show_replace = !self.show_replace;
+                self.panels.replace = !self.panels.replace;
             }
         });
         // Row 2: Replace (when expanded)
-        if self.show_replace {
+        if self.panels.replace {
             ui.horizontal(|ui| {
                 ui.label("Replace:");
-                ui.text_edit_singleline(&mut self.replace_input);
-                let has_matches = !self.search_matches.is_empty() && self.edit_buffer.is_some();
+                ui.text_edit_singleline(&mut self.search.replace_input);
+                let has_matches = !self.search.matches.is_empty() && self.edit_buffer.is_some();
                 if ui.add_enabled(has_matches, egui::Button::new("Replace")).clicked() {
                     self.replace_current();
                 }
@@ -1381,12 +1446,12 @@ impl HexenlyApp {
     }
 
     fn show_goto_bar(&mut self, ui: &mut egui::Ui) {
-        if !self.show_goto {
+        if !self.panels.goto {
             return;
         }
         ui.horizontal(|ui| {
             ui.label("Go to offset:");
-            let re = ui.text_edit_singleline(&mut self.goto_input);
+            let re = ui.text_edit_singleline(&mut self.goto.input);
             if re.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                 self.goto_offset();
             }
@@ -1514,7 +1579,7 @@ impl App for HexenlyApp {
         self.handle_shortcuts(ctx);
 
         // Only process edit input when not in a text input mode
-        if !self.show_search && !self.show_goto {
+        if !self.panels.search && !self.panels.goto {
             self.handle_edit_input(ctx);
         }
 
@@ -1531,7 +1596,7 @@ impl App for HexenlyApp {
         });
 
         // Structure panel (above status bar)
-        if self.show_structure_panel
+        if self.panels.structure
             && let Some(resolved) = &self.resolved_template
         {
             let resolved_clone = resolved.clone();
@@ -1541,15 +1606,21 @@ impl App for HexenlyApp {
                 .resizable(true)
                 .show(ctx, |ui| {
                     let action = structure::show(ui, &resolved_clone, cursor);
-                    if let Some(StructureAction::GoToOffset(off)) = action {
-                        self.cursor_offset = off;
-                        self.scroll_to_cursor();
+                    match action {
+                        Some(StructureAction::GoToOffset(off)) => {
+                            self.cursor_offset = off;
+                            self.scroll_to_cursor();
+                        }
+                        Some(StructureAction::Close) => {
+                            self.panels.structure = false;
+                        }
+                        None => {}
                     }
                 });
         }
 
         // Left template browser panel
-        if self.show_template_browser {
+        if self.panels.template_browser {
             SidePanel::left("templates")
                 .default_width(200.0)
                 .show(ctx, |ui| {
@@ -1563,11 +1634,14 @@ impl App for HexenlyApp {
                         Some(TemplateBrowserAction::Select(idx)) => {
                             self.active_template_index = Some(idx);
                             self.resolve_active_template();
-                            self.show_structure_panel = true;
+                            self.panels.structure = true;
                         }
                         Some(TemplateBrowserAction::Deselect) => {
                             self.active_template_index = None;
                             self.resolved_template = None;
+                        }
+                        Some(TemplateBrowserAction::Close) => {
+                            self.panels.template_browser = false;
                         }
                         None => {}
                     }
@@ -1575,7 +1649,7 @@ impl App for HexenlyApp {
         }
 
         // Right bookmarks panel (before inspector so it appears to its left)
-        if self.show_bookmarks {
+        if self.panels.bookmarks {
             SidePanel::right("bookmarks")
                 .default_width(250.0)
                 .show(ctx, |ui| {
@@ -1612,20 +1686,27 @@ impl App for HexenlyApp {
                                 save_bookmarks(file.path(), &self.bookmarks);
                             }
                         }
+                        Some(BookmarkAction::Close) => {
+                            self.panels.bookmarks = false;
+                        }
                         None => {}
                     }
                 });
         }
 
         // Right inspector panel
-        if self.show_inspector {
+        if self.panels.inspector {
             SidePanel::right("inspector")
                 .default_width(260.0)
                 .show(ctx, |ui| {
-                    if let Some(data) = self.data_bytes() {
-                        inspector::show(ui, data, self.cursor_offset, &self.hex_colors);
+                    let close = if let Some(data) = self.data_bytes() {
+                        inspector::show(ui, data, self.cursor_offset, &self.hex_colors)
                     } else {
                         ui.label("No file open");
+                        false
+                    };
+                    if close {
+                        self.panels.inspector = false;
                     }
                 });
         }
@@ -1638,7 +1719,7 @@ impl App for HexenlyApp {
                 let char_width = ui.fonts_mut(|f| f.glyph_width(&font, '0'));
                 let available = ui.available_width();
                 let chars_available = (available / char_width) as usize;
-                let cols = if self.show_ascii_pane {
+                let cols = if self.panels.ascii_pane {
                     // total_chars = 13 + 4*cols
                     chars_available.saturating_sub(13) / 4
                 } else {
@@ -1664,8 +1745,8 @@ impl App for HexenlyApp {
                     self.columns,
                     self.cursor_offset,
                     self.selection.as_ref(),
-                    &self.search_matches,
-                    self.show_ascii_pane,
+                    &self.search.matches,
+                    self.panels.ascii_pane,
                     &mut self.hex_view_state,
                     self.resolved_template.as_ref(),
                     self.nibble_high,
@@ -1764,6 +1845,34 @@ fn save_bookmarks(file_path: &std::path::Path, bookmarks: &[Bookmark]) {
     let json = serde_json::to_string_pretty(&Sidecar { bookmarks }).unwrap_or_default();
     if let Err(e) = std::fs::write(&sidecar, json) {
         tracing::error!("Failed to save bookmarks: {e}");
+    }
+}
+
+fn recent_files_path() -> Option<PathBuf> {
+    let dir = dirs::data_dir()?.join("hexenly");
+    Some(dir.join("recent.json"))
+}
+
+fn load_recent_files() -> Vec<PathBuf> {
+    let Some(path) = recent_files_path() else {
+        return vec![];
+    };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return vec![];
+    };
+    serde_json::from_str::<Vec<PathBuf>>(&content).unwrap_or_default()
+}
+
+fn save_recent_files(files: &[PathBuf]) {
+    let Some(path) = recent_files_path() else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let json = serde_json::to_string_pretty(files).unwrap_or_default();
+    if let Err(e) = std::fs::write(&path, json) {
+        tracing::error!("Failed to save recent files: {e}");
     }
 }
 

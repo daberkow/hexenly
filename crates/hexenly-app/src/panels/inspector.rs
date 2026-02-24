@@ -1,10 +1,18 @@
-use egui::{Grid, RichText, ScrollArea, Ui};
+use egui::{self, Grid, RichText, ScrollArea, Ui};
 use hexenly_core::ByteInterpreter;
 
 use crate::theme::{HexColors, monospace_font};
 
-pub fn show(ui: &mut Ui, data: &[u8], cursor: usize, colors: &HexColors) {
-    ui.heading("Inspector");
+pub fn show(ui: &mut Ui, data: &[u8], cursor: usize, colors: &HexColors) -> bool {
+    let mut close = false;
+    ui.horizontal(|ui| {
+        ui.heading("Inspector");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.small_button("\u{2715}").clicked() {
+                close = true;
+            }
+        });
+    });
     ui.separator();
 
     ScrollArea::vertical()
@@ -98,6 +106,8 @@ pub fn show(ui: &mut Ui, data: &[u8], cursor: usize, colors: &HexColors) {
         opt_row(ui, "UTF-16 BE", interp.utf16_be_char.clone());
     });
     }); // ScrollArea
+
+    close
 }
 
 fn row(ui: &mut Ui, label: &str, value: &str) {
