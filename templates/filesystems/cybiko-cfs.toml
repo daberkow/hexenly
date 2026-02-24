@@ -1,0 +1,126 @@
+name = "Cybiko CFS (Xtreme)"
+description = "Cybiko Xtreme filesystem — SST 39VF400A flash (258-byte pages, 2000 file blocks)"
+extensions = ["img", "bin"]
+endian = "big"
+
+# Boot section: 5 pages x 258 bytes = 1290 bytes, all 0xFF
+[[regions]]
+id = "boot"
+label = "Boot Blocks"
+color = "#7F8C8D"
+offset = 0
+length = 1290
+group = "boot"
+description = "5 boot pages (258 bytes each), reserved for bootloader — all 0xFF, CRC = 0xFFFF"
+
+[[regions.fields]]
+id = "boot_data"
+label = "Boot Data"
+field_type = "bytes"
+length = 1290
+role = "reserved"
+
+# File pages: 258-byte repeating pages until end of image
+[[regions]]
+id = "file_page"
+label = "File Page"
+color = "#2ECC71"
+offset = 1290
+repeat = "until_eof"
+group = "pages"
+description = "258-byte page: 2-byte CRC16 + 256-byte block data"
+
+# Page CRC16 (XOR-rotate checksum over 256 block data bytes)
+[[regions.fields]]
+id = "page_crc"
+label = "CRC16"
+field_type = "u16_be"
+length = 2
+role = "checksum"
+color = "#95A5A6"
+description = "XOR-rotate checksum: val = (val ^ data[i] ^ i) << 1"
+
+# Common block header (6 bytes, all blocks)
+[[regions.fields]]
+id = "flags"
+label = "Flags"
+field_type = "u8"
+length = 1
+description = "Bit 7 = BLOCK_USED (0x80 = used, 0x7F = free, 0xFF = erased)"
+
+[[regions.fields]]
+id = "data_size"
+label = "Data Size"
+field_type = "u8"
+length = 1
+role = "size"
+description = "Bytes of actual file data stored in this block"
+
+[[regions.fields]]
+id = "file_id"
+label = "File ID"
+field_type = "u16_be"
+length = 2
+description = "File identifier — equals block index of first part"
+
+[[regions.fields]]
+id = "part_id"
+label = "Part ID"
+field_type = "u16_be"
+length = 2
+description = "0 = first block (has filename/timestamp), 1+ = continuation"
+
+# --- First block fields (only when part_id == 0) ---
+
+[[regions.fields]]
+id = "type_marker"
+label = "Type"
+field_type = "u8"
+length = 1
+condition = "part_id == 0"
+description = "0x20 = file entry header"
+
+[regions.fields.enum_values]
+"32" = "File Entry"
+"0" = "Empty"
+"255" = "Erased"
+
+[[regions.fields]]
+id = "filename"
+label = "Filename"
+field_type = "ascii"
+length = 67
+condition = "part_id == 0"
+color = "#3498DB"
+description = "Null-terminated, max 58 chars, padded with 0xFF"
+
+[[regions.fields]]
+id = "timestamp"
+label = "Timestamp"
+field_type = "u32_be"
+length = 4
+condition = "part_id == 0"
+color = "#E67E22"
+description = "Seconds since 1900-01-01 00:00:00 UTC"
+
+[[regions.fields]]
+id = "first_block_data"
+label = "File Data"
+field_type = "bytes"
+length = 178
+condition = "part_id == 0"
+role = "data"
+color = "#E74C3C"
+description = "First 178 bytes of file content"
+
+# --- Continuation/unused block data (part_id != 0) ---
+
+[[regions.fields]]
+id = "cont_block_data"
+label = "Block Data"
+field_type = "bytes"
+length = 250
+condition = "part_id != 0"
+role = "data"
+color = "#E74C3C"
+description = "Continuation file data (250 bytes) or unused block (0xFF)"

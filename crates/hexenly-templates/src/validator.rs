@@ -260,18 +260,6 @@ pub fn validate(template: &Template) -> Vec<ValidationWarning> {
                 region_deps.push(cond.field_id.as_str());
             }
 
-            // Check size_target references
-            if let Some(target) = &field.size_target
-                && !all_ids.contains(target.as_str())
-            {
-                warnings.push(ValidationWarning {
-                    message: format!(
-                        "field '{}': size_target references unknown ID '{}'",
-                        field.id, target
-                    ),
-                });
-            }
-
             // Validate enum_values keys
             if let Some(enum_values) = &field.enum_values {
                 for key in enum_values.keys() {
@@ -446,7 +434,7 @@ mod tests {
             offset: None,
             role: None,
             description: None,
-            size_target: None,
+
             condition: None,
             enum_values: None,
             bit_flags: None,

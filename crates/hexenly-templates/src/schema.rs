@@ -106,9 +106,6 @@ pub struct Field {
     pub role: Option<FieldRole>,
     #[serde(default)]
     pub description: Option<String>,
-    /// ID of another field whose value gives the size of this field
-    #[serde(default)]
-    pub size_target: Option<String>,
     /// Condition to evaluate — field is skipped if false
     #[serde(default)]
     pub condition: Option<ConditionExpr>,

@@ -4,6 +4,17 @@ mod theme;
 
 use app::HexenlyApp;
 
+fn load_icon() -> egui::IconData {
+    let png_bytes = include_bytes!("../../../docs/logo128.png");
+    let img = image::load_from_memory(png_bytes).expect("Failed to decode icon PNG");
+    let rgba = img.to_rgba8();
+    egui::IconData {
+        rgba: rgba.to_vec(),
+        width: rgba.width(),
+        height: rgba.height(),
+    }
+}
+
 fn main() -> eframe::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -14,10 +25,13 @@ fn main() -> eframe::Result<()> {
 
     let path = std::env::args().nth(1);
 
+    let icon = load_icon();
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
-            .with_title("Hexenly"),
+            .with_title("Hexenly")
+            .with_icon(icon),
         ..Default::default()
     };
 
