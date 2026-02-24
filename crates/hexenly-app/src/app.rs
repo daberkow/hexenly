@@ -886,6 +886,14 @@ impl App for HexenlyApp {
             self.open_path(std::path::Path::new(&path));
         }
 
+        // Handle drag-and-drop file opening
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        if let Some(file) = dropped.first()
+            && let Some(path) = &file.path
+        {
+            self.open_path(path);
+        }
+
         self.handle_shortcuts(ctx);
 
         // Top toolbar
@@ -1061,6 +1069,21 @@ impl App for HexenlyApp {
                 });
             }
         });
+
+        // Drop zone visual indicator
+        if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
+            let screen = ctx.input(|i| i.viewport_rect());
+            let painter =
+                ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop_overlay")));
+            painter.rect_filled(screen, 0.0, Color32::from_rgba_unmultiplied(40, 80, 160, 60));
+            painter.text(
+                screen.center(),
+                egui::Align2::CENTER_CENTER,
+                "Drop file to open",
+                egui::FontId::proportional(24.0),
+                Color32::WHITE,
+            );
+        }
 
         self.show_notifications(ctx);
 
