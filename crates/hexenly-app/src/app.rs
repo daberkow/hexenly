@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use eframe::App;
 use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TopBottomPanel};
-use hexenly_core::{Bookmark, HexFile, SearchPattern, Selection, find_all};
+use hexenly_core::{Bookmark, EditBuffer, EditMode, HexFile, SearchPattern, Selection, find_all};
 use hexenly_templates::engine::{self, ResolveResult};
 use hexenly_templates::loader::TemplateRegistry;
 use hexenly_templates::resolved::ResolvedTemplate;
@@ -36,6 +36,7 @@ const NOTIFICATION_DURATION_SECS: f32 = 5.0;
 
 pub struct HexenlyApp {
     file: Option<HexFile>,
+    edit_buffer: Option<EditBuffer>,
     cursor_offset: usize,
     selection: Option<Selection>,
     selection_anchor: Option<usize>,
@@ -78,6 +79,14 @@ pub struct HexenlyApp {
     // Bookmarks
     show_bookmarks: bool,
     bookmarks: Vec<Bookmark>,
+
+    /// True = waiting for high nibble (first digit), false = waiting for low nibble.
+    nibble_high: bool,
+    /// Which pane has edit focus for keyboard input.
+    edit_focus: HexPane,
+
+    /// When true, the next close request will not be cancelled (force quit).
+    force_closing: bool,
 }
 
 impl HexenlyApp {
@@ -128,6 +137,7 @@ impl HexenlyApp {
 
         Self {
             file: None,
+            edit_buffer: None,
             cursor_offset: 0,
             selection: None,
             selection_anchor: None,
@@ -159,6 +169,9 @@ impl HexenlyApp {
             notifications,
             show_bookmarks: false,
             bookmarks: Vec::new(),
+            nibble_high: true,
+            edit_focus: HexPane::Hex,
+            force_closing: false,
         }
     }
 
@@ -172,8 +185,24 @@ impl HexenlyApp {
         match HexFile::open(path) {
             Ok(f) => {
                 self.file = Some(f);
+                let file_ref = self.file.as_ref().unwrap();
+
+                // Warn if file is larger than 100 MB
+                const LARGE_FILE_THRESHOLD: usize = 100 * 1024 * 1024;
+                if file_ref.len() > LARGE_FILE_THRESHOLD {
+                    let size_str = format_size(file_ref.len());
+                    tracing::warn!("Large file ({size_str}) — editing buffer may use significant memory");
+                    self.notifications.push(Notification {
+                        message: format!("Large file ({size_str}) — editing buffer may use significant memory"),
+                        level: NotificationLevel::Warning,
+                        created: Instant::now(),
+                    });
+                }
+
+                self.edit_buffer = Some(EditBuffer::from_file(file_ref));
                 self.cursor_offset = 0;
                 self.selection = None;
+                self.nibble_high = true;
                 self.search_matches.clear();
                 self.search_match_idx = None;
                 self.active_template_index = None;
@@ -189,9 +218,24 @@ impl HexenlyApp {
         }
     }
 
+    fn data_bytes(&self) -> Option<&[u8]> {
+        if let Some(buf) = &self.edit_buffer {
+            Some(buf.data())
+        } else {
+            self.file.as_ref().map(|f| f.as_bytes())
+        }
+    }
+
+    fn data_len(&self) -> usize {
+        self.edit_buffer
+            .as_ref()
+            .map(|b| b.len())
+            .or_else(|| self.file.as_ref().map(|f| f.len()))
+            .unwrap_or(0)
+    }
+
     fn auto_detect_template(&mut self, path: &std::path::Path) {
-        let Some(file) = &self.file else { return };
-        let bytes = file.as_bytes();
+        let Some(bytes) = self.data_bytes() else { return };
 
         // Try magic bytes first
         let matches = self.template_registry.detect_for_file(bytes);
@@ -228,7 +272,7 @@ impl HexenlyApp {
     }
 
     fn resolve_active_template(&mut self) {
-        let Some(file) = &self.file else {
+        let Some(data) = self.data_bytes() else {
             self.resolved_template = None;
             return;
         };
@@ -241,7 +285,7 @@ impl HexenlyApp {
             return;
         };
 
-        let result: ResolveResult = engine::resolve(&entry.template, file.as_bytes());
+        let result: ResolveResult = engine::resolve(&entry.template, data);
 
         for warning in &result.warnings {
             tracing::warn!("Template resolve: {warning}");
@@ -257,7 +301,7 @@ impl HexenlyApp {
 
     fn do_search(&mut self) {
         self.search_error = None;
-        let Some(file) = &self.file else { return };
+        let Some(data) = self.data_bytes() else { return };
         let pattern = if self.search_hex_mode {
             match SearchPattern::from_hex_string(&self.search_input) {
                 Some(p) => p,
@@ -270,7 +314,7 @@ impl HexenlyApp {
             SearchPattern::from_text(&self.search_input)
         };
 
-        self.search_matches = find_all(file.as_bytes(), &pattern, 10_000);
+        self.search_matches = find_all(data, &pattern, 10_000);
         if let Some(&first) = self.search_matches.first() {
             self.search_match_idx = Some(0);
             self.cursor_offset = first;
@@ -315,9 +359,10 @@ impl HexenlyApp {
         } else {
             text.parse::<usize>().ok()
         };
+        let len = self.data_len();
         if let Some(off) = offset
-            && let Some(file) = &self.file
-            && off < file.len()
+            && len > 0
+            && off < len
         {
             self.cursor_offset = off;
             self.selection = None;
@@ -365,11 +410,11 @@ impl HexenlyApp {
 
     /// Move cursor by a signed delta, clamping to valid range.
     fn move_cursor(&mut self, delta: isize) {
-        let Some(file) = &self.file else { return };
-        if file.is_empty() {
+        let len = self.data_len();
+        if len == 0 {
             return;
         }
-        let max = file.len() - 1;
+        let max = len - 1;
         let new_offset = if delta < 0 {
             self.cursor_offset.saturating_sub(delta.unsigned_abs())
         } else {
@@ -378,28 +423,30 @@ impl HexenlyApp {
         self.cursor_offset = new_offset;
         self.selection = None;
         self.selection_anchor = None;
+        self.nibble_high = true;
         self.scroll_to_cursor();
     }
 
     /// Set cursor to an absolute offset, clamping to valid range.
     fn set_cursor_abs(&mut self, offset: usize) {
-        let Some(file) = &self.file else { return };
-        if file.is_empty() {
+        let len = self.data_len();
+        if len == 0 {
             return;
         }
-        self.cursor_offset = offset.min(file.len() - 1);
+        self.cursor_offset = offset.min(len - 1);
         self.selection = None;
         self.selection_anchor = None;
+        self.nibble_high = true;
         self.scroll_to_cursor();
     }
 
     /// Move cursor by a signed delta, extending the selection from the anchor.
     fn move_cursor_select(&mut self, delta: isize) {
-        let Some(file) = &self.file else { return };
-        if file.is_empty() {
+        let len = self.data_len();
+        if len == 0 {
             return;
         }
-        let max = file.len().saturating_sub(1);
+        let max = len.saturating_sub(1);
         let anchor = self.selection_anchor.unwrap_or(self.cursor_offset);
         self.selection_anchor = Some(anchor);
         if delta < 0 {
@@ -408,19 +455,21 @@ impl HexenlyApp {
             self.cursor_offset = self.cursor_offset.saturating_add(delta as usize).min(max);
         }
         self.selection = Some(Selection::new(anchor, self.cursor_offset));
+        self.nibble_high = true;
         self.scroll_to_cursor();
     }
 
     /// Set cursor to an absolute offset, extending the selection from the anchor.
     fn set_cursor_select(&mut self, offset: usize) {
-        let Some(file) = &self.file else { return };
-        if file.is_empty() {
+        let len = self.data_len();
+        if len == 0 {
             return;
         }
         let anchor = self.selection_anchor.unwrap_or(self.cursor_offset);
         self.selection_anchor = Some(anchor);
-        self.cursor_offset = offset.min(file.len().saturating_sub(1));
+        self.cursor_offset = offset.min(len.saturating_sub(1));
         self.selection = Some(Selection::new(anchor, self.cursor_offset));
+        self.nibble_high = true;
         self.scroll_to_cursor();
     }
 
@@ -453,7 +502,26 @@ impl HexenlyApp {
             ctrl_end: bool,
         }
 
-        let (open, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark) = ctx.input_mut(|i| {
+        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit) = ctx.input_mut(|i| {
+            let force_quit = i.consume_key(egui::Modifiers::COMMAND, Key::Q);
+
+            // Ctrl+Shift+S must be consumed BEFORE Ctrl+S
+            let save_as = i.consume_key(
+                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+                Key::S,
+            );
+            let save = i.consume_key(egui::Modifiers::COMMAND, Key::S);
+
+            // Ctrl+Shift+Z must be consumed BEFORE Ctrl+Z
+            let redo = i.consume_key(
+                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
+                Key::Z,
+            );
+            let undo = i.consume_key(egui::Modifiers::COMMAND, Key::Z);
+
+            let select_all = i.consume_key(egui::Modifiers::COMMAND, Key::A);
+            let insert_key = i.consume_key(egui::Modifiers::NONE, Key::Insert);
+
             let open = i.consume_key(egui::Modifiers::COMMAND, Key::O);
             let goto = i.consume_key(egui::Modifiers::COMMAND, Key::G);
             let find = i.consume_key(egui::Modifiers::COMMAND, Key::F);
@@ -508,6 +576,9 @@ impl HexenlyApp {
             let shift_home = i.consume_key(egui::Modifiers::SHIFT, Key::Home);
             let shift_end = i.consume_key(egui::Modifiers::SHIFT, Key::End);
 
+            let delete = i.consume_key(egui::Modifiers::NONE, Key::Delete);
+            let backspace = i.consume_key(egui::Modifiers::NONE, Key::Backspace);
+
             let nav = NavKeys {
                 left,
                 right,
@@ -534,11 +605,41 @@ impl HexenlyApp {
                 ctrl_end: shift_ctrl_end,
             };
 
-            (open, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark)
+            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit)
         });
 
+        if force_quit {
+            self.force_closing = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         if open {
             self.open_file_dialog();
+        }
+        if save {
+            self.save_file();
+        }
+        if save_as {
+            self.save_file_as();
+        }
+        if undo
+            && let Some(buf) = &mut self.edit_buffer
+        {
+            buf.undo();
+        }
+        if redo
+            && let Some(buf) = &mut self.edit_buffer
+        {
+            buf.redo();
+        }
+        if select_all && self.data_len() > 0 {
+            let max = self.data_len() - 1;
+            self.selection = Some(Selection::new(0, max));
+            self.selection_anchor = Some(0);
+        }
+        if insert_key
+            && let Some(buf) = &mut self.edit_buffer
+        {
+            buf.toggle_mode();
         }
         if goto {
             self.show_goto = !self.show_goto;
@@ -589,8 +690,15 @@ impl HexenlyApp {
             self.set_cursor_abs(off);
         }
 
-        // Keyboard navigation (only when a file is open)
-        if self.file.is_some() {
+        // Delete / Backspace
+        if (delete || backspace) && self.edit_buffer.is_some() {
+            self.handle_delete(delete);
+        }
+
+        // Keyboard navigation (only when data is available)
+        if self.data_len() > 0 {
+            let data_len = self.data_len();
+
             if nav.left {
                 self.move_cursor(-1);
             }
@@ -613,20 +721,16 @@ impl HexenlyApp {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
                 self.set_cursor_abs(row_start);
             }
-            if nav.end
-                && let Some(file) = &self.file
-            {
+            if nav.end {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
-                let row_end = (row_start + self.columns - 1).min(file.len().saturating_sub(1));
+                let row_end = (row_start + self.columns - 1).min(data_len.saturating_sub(1));
                 self.set_cursor_abs(row_end);
             }
             if nav.ctrl_home {
                 self.set_cursor_abs(0);
             }
-            if nav.ctrl_end
-                && let Some(file) = &self.file
-            {
-                self.set_cursor_abs(file.len().saturating_sub(1));
+            if nav.ctrl_end {
+                self.set_cursor_abs(data_len.saturating_sub(1));
             }
 
             // Shift+key selection
@@ -652,27 +756,171 @@ impl HexenlyApp {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
                 self.set_cursor_select(row_start);
             }
-            if shift_nav.end
-                && let Some(file) = &self.file
-            {
+            if shift_nav.end {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
-                let row_end = (row_start + self.columns - 1).min(file.len().saturating_sub(1));
+                let row_end = (row_start + self.columns - 1).min(data_len.saturating_sub(1));
                 self.set_cursor_select(row_end);
             }
             if shift_nav.ctrl_home {
                 self.set_cursor_select(0);
             }
-            if shift_nav.ctrl_end
-                && let Some(file) = &self.file
-            {
-                self.set_cursor_select(file.len().saturating_sub(1));
+            if shift_nav.ctrl_end {
+                self.set_cursor_select(data_len.saturating_sub(1));
             }
         }
     }
 
+    fn handle_edit_input(&mut self, ctx: &Context) {
+        let Some(buf) = &self.edit_buffer else { return };
+        if buf.is_empty() {
+            return;
+        }
+
+        // Collect text events (typed characters)
+        let typed_chars: Vec<char> = ctx.input(|i| {
+            i.events
+                .iter()
+                .filter_map(|e| {
+                    if let egui::Event::Text(s) = e {
+                        s.chars().next()
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        });
+
+        for ch in typed_chars {
+            match self.edit_focus {
+                HexPane::Hex => self.handle_hex_input(ch),
+                HexPane::Ascii => self.handle_ascii_input(ch),
+            }
+        }
+    }
+
+    fn handle_hex_input(&mut self, ch: char) {
+        let Some(digit) = ch.to_digit(16) else { return };
+        let digit = digit as u8;
+        let Some(buf) = &mut self.edit_buffer else { return };
+
+        // If selection exists, delete it first (insert mode) or start from selection start
+        if let Some(sel) = self.selection.take() {
+            if buf.mode() == EditMode::Insert {
+                buf.delete_range(sel.start, sel.end);
+            }
+            self.cursor_offset = sel.start.min(buf.len().saturating_sub(1));
+            self.selection_anchor = None;
+            self.nibble_high = true;
+        }
+
+        let offset = self.cursor_offset;
+
+        if buf.mode() == EditMode::Insert && self.nibble_high {
+            // Insert a new 0x00 byte, then we'll set the high nibble
+            buf.insert_byte(offset, 0x00);
+        }
+
+        if offset >= buf.len() {
+            return;
+        }
+        let current = buf.data()[offset];
+        let new_byte = if self.nibble_high {
+            (digit << 4) | (current & 0x0F)
+        } else {
+            (current & 0xF0) | digit
+        };
+        buf.overwrite_byte(offset, new_byte);
+
+        if self.nibble_high {
+            self.nibble_high = false;
+        } else {
+            self.nibble_high = true;
+            // Advance cursor
+            let max = buf.len().saturating_sub(1);
+            if self.cursor_offset < max {
+                self.cursor_offset += 1;
+            }
+        }
+    }
+
+    fn handle_ascii_input(&mut self, ch: char) {
+        if !ch.is_ascii() || ch.is_ascii_control() {
+            return;
+        }
+        let Some(buf) = &mut self.edit_buffer else { return };
+
+        // If selection exists, delete it first (insert mode) or start from selection start
+        if let Some(sel) = self.selection.take() {
+            if buf.mode() == EditMode::Insert {
+                buf.delete_range(sel.start, sel.end);
+            }
+            self.cursor_offset = sel.start.min(buf.len().saturating_sub(1));
+            self.selection_anchor = None;
+        }
+
+        let offset = self.cursor_offset;
+
+        if buf.mode() == EditMode::Insert {
+            buf.insert_byte(offset, ch as u8);
+        } else {
+            buf.overwrite_byte(offset, ch as u8);
+        }
+
+        // Advance cursor
+        let max = buf.len().saturating_sub(1);
+        if self.cursor_offset < max {
+            self.cursor_offset += 1;
+        }
+        self.nibble_high = true;
+    }
+
+    fn handle_delete(&mut self, is_forward: bool) {
+        let Some(buf) = &mut self.edit_buffer else { return };
+        if buf.is_empty() {
+            return;
+        }
+
+        // If there's a selection, operate on the range
+        if let Some(sel) = self.selection.take() {
+            if buf.mode() == EditMode::Insert {
+                buf.delete_range(sel.start, sel.end);
+                self.cursor_offset = sel.start.min(buf.len().saturating_sub(1));
+            } else {
+                // Overwrite mode: zero the selected bytes
+                let zeros = vec![0u8; sel.len()];
+                buf.overwrite_range(sel.start, &zeros);
+                self.cursor_offset = sel.start;
+            }
+            self.selection_anchor = None;
+            self.nibble_high = true;
+            return;
+        }
+
+        // No selection -- single byte operation
+        if buf.mode() == EditMode::Insert {
+            if is_forward {
+                // Delete key: remove byte at cursor
+                buf.delete_byte(self.cursor_offset);
+                if self.cursor_offset >= buf.len() && !buf.is_empty() {
+                    self.cursor_offset = buf.len() - 1;
+                }
+            } else {
+                // Backspace: remove byte before cursor
+                if self.cursor_offset > 0 {
+                    self.cursor_offset -= 1;
+                    buf.delete_byte(self.cursor_offset);
+                }
+            }
+        } else {
+            // Overwrite mode: zero the byte
+            buf.overwrite_byte(self.cursor_offset, 0x00);
+        }
+        self.nibble_high = true;
+    }
+
     fn selected_bytes(&self) -> Option<&[u8]> {
         let sel = self.selection.as_ref()?;
-        let bytes = self.file.as_ref()?.as_bytes();
+        let bytes = self.data_bytes()?;
         let start = sel.start.min(bytes.len());
         let end = (sel.end + 1).min(bytes.len());
         Some(&bytes[start..end])
@@ -702,54 +950,207 @@ impl HexenlyApp {
         ctx.copy_text(text);
     }
 
-    fn show_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui.button("Open").clicked() {
-                self.open_file_dialog();
-            }
+    fn show_menu_bar(&mut self, ui: &mut egui::Ui) {
+        let file_open = self.edit_buffer.is_some();
+        let is_dirty = self.edit_buffer.as_ref().is_some_and(|b| b.is_dirty());
+        let can_undo = self.edit_buffer.as_ref().is_some_and(|b| b.can_undo());
+        let can_redo = self.edit_buffer.as_ref().is_some_and(|b| b.can_redo());
+        let data_len = self.data_len();
 
-            ui.separator();
-
-            ui.label("Columns:");
-            if ui
-                .selectable_label(self.auto_columns, "Auto")
-                .clicked()
-            {
-                self.auto_columns = true;
-            }
-            for &n in &[8, 16, 24, 32, 48] {
+        egui::MenuBar::new().ui(ui, |ui| {
+            ui.menu_button("File", |ui| {
                 if ui
-                    .selectable_label(!self.auto_columns && self.columns == n, format!("{n}"))
+                    .add(egui::Button::new("Open").shortcut_text("Ctrl+O"))
                     .clicked()
                 {
-                    self.columns = n;
-                    self.auto_columns = false;
+                    ui.close();
+                    self.open_file_dialog();
                 }
-            }
+                if ui
+                    .add_enabled(
+                        file_open && is_dirty,
+                        egui::Button::new("Save").shortcut_text("Ctrl+S"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    self.save_file();
+                }
+                if ui
+                    .add_enabled(
+                        file_open,
+                        egui::Button::new("Save As...").shortcut_text("Ctrl+Shift+S"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    self.save_file_as();
+                }
+            });
 
-            ui.separator();
+            ui.menu_button("Edit", |ui| {
+                if ui
+                    .add_enabled(
+                        can_undo,
+                        egui::Button::new("Undo").shortcut_text("Ctrl+Z"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    if let Some(buf) = &mut self.edit_buffer {
+                        buf.undo();
+                    }
+                }
+                if ui
+                    .add_enabled(
+                        can_redo,
+                        egui::Button::new("Redo").shortcut_text("Ctrl+Shift+Z"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    if let Some(buf) = &mut self.edit_buffer {
+                        buf.redo();
+                    }
+                }
+                ui.separator();
+                if ui
+                    .add(egui::Button::new("Find").shortcut_text("Ctrl+F"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.show_search = !self.show_search;
+                    self.focus_search = self.show_search;
+                    self.show_goto = false;
+                }
+                if ui
+                    .add(egui::Button::new("Go to Offset").shortcut_text("Ctrl+G"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.show_goto = !self.show_goto;
+                    self.show_search = false;
+                }
+                ui.separator();
+                if ui
+                    .add_enabled(
+                        data_len > 0,
+                        egui::Button::new("Select All").shortcut_text("Ctrl+A"),
+                    )
+                    .clicked()
+                {
+                    ui.close();
+                    let max = data_len - 1;
+                    self.selection = Some(Selection::new(0, max));
+                    self.selection_anchor = Some(0);
+                }
+            });
 
-            if ui
-                .selectable_label(self.text_encoding == TextEncoding::Ascii, "ASCII")
-                .clicked()
-            {
-                self.text_encoding = TextEncoding::Ascii;
-            }
-            if ui
-                .selectable_label(self.text_encoding == TextEncoding::Utf8, "UTF-8")
-                .clicked()
-            {
-                self.text_encoding = TextEncoding::Utf8;
-            }
-
-            ui.separator();
-
-            ui.toggle_value(&mut self.show_ascii_pane, "ASCII Pane");
-            ui.toggle_value(&mut self.show_inspector, "Inspector");
-            ui.toggle_value(&mut self.show_template_browser, "Templates");
-            ui.toggle_value(&mut self.show_structure_panel, "Structure");
-            ui.toggle_value(&mut self.show_bookmarks, "Bookmarks");
+            ui.menu_button("View", |ui| {
+                ui.menu_button("Columns", |ui| {
+                    if ui.selectable_label(self.auto_columns, "Auto").clicked() {
+                        self.auto_columns = true;
+                        ui.close();
+                    }
+                    for &n in &[8, 16, 24, 32, 48] {
+                        if ui
+                            .selectable_label(!self.auto_columns && self.columns == n, format!("{n}"))
+                            .clicked()
+                        {
+                            self.columns = n;
+                            self.auto_columns = false;
+                            ui.close();
+                        }
+                    }
+                });
+                ui.menu_button("Encoding", |ui| {
+                    if ui
+                        .selectable_label(self.text_encoding == TextEncoding::Ascii, "ASCII")
+                        .clicked()
+                    {
+                        self.text_encoding = TextEncoding::Ascii;
+                        ui.close();
+                    }
+                    if ui
+                        .selectable_label(self.text_encoding == TextEncoding::Utf8, "UTF-8")
+                        .clicked()
+                    {
+                        self.text_encoding = TextEncoding::Utf8;
+                        ui.close();
+                    }
+                });
+                ui.separator();
+                if ui
+                    .selectable_label(self.show_ascii_pane, "ASCII Pane")
+                    .clicked()
+                {
+                    self.show_ascii_pane = !self.show_ascii_pane;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.show_inspector, "Inspector")
+                    .clicked()
+                {
+                    self.show_inspector = !self.show_inspector;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.show_template_browser, "Templates")
+                    .clicked()
+                {
+                    self.show_template_browser = !self.show_template_browser;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.show_structure_panel, "Structure")
+                    .clicked()
+                {
+                    self.show_structure_panel = !self.show_structure_panel;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(self.show_bookmarks, "Bookmarks")
+                    .clicked()
+                {
+                    self.show_bookmarks = !self.show_bookmarks;
+                    ui.close();
+                }
+            });
         });
+    }
+
+    fn save_file(&mut self) {
+        if let Some(buf) = &mut self.edit_buffer
+            && let Err(e) = buf.save()
+        {
+            self.notifications.push(Notification {
+                message: format!("Save failed: {e}"),
+                level: NotificationLevel::Error,
+                created: Instant::now(),
+            });
+        }
+    }
+
+    fn save_file_as(&mut self) {
+        let Some(buf) = &mut self.edit_buffer else { return };
+        let mut dialog = rfd::FileDialog::new();
+        if let Some(path) = buf.file_path() {
+            if let Some(dir) = path.parent() {
+                dialog = dialog.set_directory(dir);
+            }
+            if let Some(name) = path.file_name() {
+                dialog = dialog.set_file_name(name.to_string_lossy().to_string());
+            }
+        }
+        if let Some(path) = dialog.save_file()
+            && let Err(e) = buf.save_as(&path)
+        {
+            self.notifications.push(Notification {
+                message: format!("Save failed: {e}"),
+                level: NotificationLevel::Error,
+                created: Instant::now(),
+            });
+        }
     }
 
     fn show_search_bar(&mut self, ui: &mut egui::Ui) {
@@ -809,7 +1210,8 @@ impl HexenlyApp {
         });
     }
 
-    fn show_status_bar(&self, ui: &mut egui::Ui) {
+    fn show_status_bar(&mut self, ui: &mut egui::Ui) {
+        let mut toggle_mode = false;
         ui.horizontal(|ui| {
             if let Some(file) = &self.file {
                 let name = file
@@ -817,10 +1219,35 @@ impl HexenlyApp {
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| "unknown".into());
-                ui.label(RichText::new(&name).strong());
-                ui.label(RichText::new(format_size(file.len())).weak());
+                let dirty = self
+                    .edit_buffer
+                    .as_ref()
+                    .is_some_and(|b| b.is_dirty());
+                let display_name = if dirty {
+                    format!("{name} *")
+                } else {
+                    name
+                };
+                ui.label(RichText::new(&display_name).strong());
+                ui.label(RichText::new(format_size(self.data_len())).weak());
 
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                    if let Some(buf) = &self.edit_buffer {
+                        let mode_text = match buf.mode() {
+                            EditMode::Overwrite => "OVR",
+                            EditMode::Insert => "INS",
+                        };
+                        if ui
+                            .add(
+                                egui::Button::new(RichText::new(mode_text).monospace())
+                                    .frame(false),
+                            )
+                            .clicked()
+                        {
+                            toggle_mode = true;
+                        }
+                        ui.separator();
+                    }
                     if let Some(resolved) = &self.resolved_template {
                         ui.label(&resolved.name);
                         ui.label(RichText::new("Template:").weak());
@@ -844,6 +1271,11 @@ impl HexenlyApp {
                 ui.label("No file open \u{2014} Ctrl+O to open");
             }
         });
+        if toggle_mode
+            && let Some(buf) = &mut self.edit_buffer
+        {
+            buf.toggle_mode();
+        }
     }
 }
 
@@ -854,16 +1286,54 @@ impl App for HexenlyApp {
             self.theme_applied = true;
         }
 
+        // Update window title with dirty indicator
+        let title = if let Some(file) = &self.file {
+            let name = file.path().file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unknown".into());
+            let dirty = if self.edit_buffer.as_ref().is_some_and(|b| b.is_dirty()) { " *" } else { "" };
+            format!("{name}{dirty} - Hexenly")
+        } else {
+            "Hexenly".to_string()
+        };
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+
+        // Warn before closing with unsaved changes
+        if ctx.input(|i| i.viewport().close_requested())
+            && !self.force_closing
+            && self.edit_buffer.as_ref().is_some_and(|b| b.is_dirty())
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.notifications.push(Notification {
+                message: "Unsaved changes! Save first or press Ctrl+Q to force quit.".into(),
+                level: NotificationLevel::Warning,
+                created: Instant::now(),
+            });
+        }
+
         // Handle pending file open from CLI
         if let Some(path) = self.pending_open.take() {
             self.open_path(std::path::Path::new(&path));
         }
 
+        // Handle drag-and-drop file opening
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        if let Some(file) = dropped.first()
+            && let Some(path) = &file.path
+        {
+            self.open_path(path);
+        }
+
         self.handle_shortcuts(ctx);
 
-        // Top toolbar
-        TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            self.show_toolbar(ui);
+        // Only process edit input when not in a text input mode
+        if !self.show_search && !self.show_goto {
+            self.handle_edit_input(ctx);
+        }
+
+        // Top menu bar
+        TopBottomPanel::top("menubar").show(ctx, |ui| {
+            self.show_menu_bar(ui);
             self.show_search_bar(ui);
             self.show_goto_bar(ui);
         });
@@ -965,8 +1435,8 @@ impl App for HexenlyApp {
             SidePanel::right("inspector")
                 .default_width(220.0)
                 .show(ctx, |ui| {
-                    if let Some(file) = &self.file {
-                        inspector::show(ui, file, self.cursor_offset);
+                    if let Some(data) = self.data_bytes() {
+                        inspector::show(ui, data, self.cursor_offset);
                     } else {
                         ui.label("No file open");
                     }
@@ -993,10 +1463,17 @@ impl App for HexenlyApp {
                 self.columns = cols.clamp(8, 128);
             }
 
-            if let Some(file) = &self.file {
+            let data: Option<&[u8]> = if let Some(buf) = &self.edit_buffer {
+                Some(buf.data())
+            } else {
+                self.file.as_ref().map(|f| f.as_bytes())
+            };
+            let data_len = data.map(|d| d.len()).unwrap_or(0);
+            if let Some(data) = data {
                 let action = hex_view::show(
                     ui,
-                    file,
+                    data,
+                    data_len,
                     self.columns,
                     self.cursor_offset,
                     self.selection.as_ref(),
@@ -1004,20 +1481,26 @@ impl App for HexenlyApp {
                     self.show_ascii_pane,
                     &mut self.hex_view_state,
                     self.resolved_template.as_ref(),
+                    self.nibble_high,
+                    self.edit_focus,
                 );
                 match action {
-                    Some(HexViewAction::SetCursor(off)) if off < file.len() => {
+                    Some(HexViewAction::SetCursor(off, pane)) if off < data_len => {
                         self.cursor_offset = off;
                         self.selection = None;
                         self.selection_anchor = None;
+                        self.edit_focus = pane;
+                        self.nibble_high = true;
                     }
                     Some(HexViewAction::Select { start, end, pane }) => {
-                        let max = file.len().saturating_sub(1);
+                        let max = data_len.saturating_sub(1);
                         let s = start.min(max);
                         let e = end.min(max);
                         self.cursor_offset = e;
                         self.selection = Some(Selection::new(s, e));
                         self.selection_pane = pane;
+                        self.edit_focus = pane;
+                        self.nibble_high = true;
                     }
                     _ => {}
                 }
@@ -1027,6 +1510,21 @@ impl App for HexenlyApp {
                 });
             }
         });
+
+        // Drop zone visual indicator
+        if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
+            let screen = ctx.input(|i| i.viewport_rect());
+            let painter =
+                ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop_overlay")));
+            painter.rect_filled(screen, 0.0, Color32::from_rgba_unmultiplied(40, 80, 160, 60));
+            painter.text(
+                screen.center(),
+                egui::Align2::CENTER_CENTER,
+                "Drop file to open",
+                egui::FontId::proportional(24.0),
+                Color32::WHITE,
+            );
+        }
 
         self.show_notifications(ctx);
 

@@ -1,8 +1,10 @@
+pub mod edit_buffer;
 pub mod file;
 pub mod interpret;
 pub mod search;
 pub mod selection;
 
+pub use edit_buffer::{EditBuffer, EditMode};
 pub use file::HexFile;
 pub use interpret::{ByteClass, ByteInterpreter, Interpretation, classify_byte};
 pub use search::{SearchPattern, find_all, find_next, find_prev};
@@ -14,4 +16,6 @@ pub enum HexError {
     Io(#[from] std::io::Error),
     #[error("File is empty")]
     EmptyFile,
+    #[error("No file path set")]
+    NoFilePath,
 }

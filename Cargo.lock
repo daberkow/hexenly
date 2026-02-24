@@ -1474,6 +1474,7 @@ version = "0.1.0"
 dependencies = [
  "memmap2",
  "serde",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 

@@ -1,5 +1,5 @@
 use egui::{Color32, Pos2, Rect, ScrollArea, Sense, Stroke, StrokeKind, Ui, Vec2};
-use hexenly_core::{ByteClass, HexFile, Selection, classify_byte};
+use hexenly_core::{ByteClass, Selection, classify_byte};
 use hexenly_templates::resolved::ResolvedTemplate;
 
 use crate::theme::{HexColors, annotation_font, monospace_font};
@@ -15,7 +15,8 @@ pub struct HexViewState {
 #[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut Ui,
-    file: &HexFile,
+    data: &[u8],
+    total_len: usize,
     columns: usize,
     cursor: usize,
     selection: Option<&Selection>,
@@ -23,6 +24,8 @@ pub fn show(
     show_ascii: bool,
     state: &mut HexViewState,
     template_overlay: Option<&ResolvedTemplate>,
+    nibble_high: bool,
+    edit_focus: HexPane,
 ) -> Option<HexViewAction> {
     let mut action = None;
     let font = monospace_font();
@@ -45,7 +48,7 @@ pub fn show(
     };
     let total_row_width = offset_width + hex_total_width + ascii_width + char_width;
 
-    let row_count = file.row_count(columns);
+    let row_count = total_len.div_ceil(columns);
 
     let scroll_to = state.scroll_to_row.take();
 
@@ -67,7 +70,12 @@ pub fn show(
             for (visual_idx, row) in row_range.clone().enumerate() {
                 let y = origin.y + visual_idx as f32 * line_height;
                 let row_offset = row * columns;
-                let row_bytes = file.read_row(row, columns);
+                let row_end = (row_offset + columns).min(data.len());
+                let row_bytes = if row_offset < data.len() {
+                    &data[row_offset..row_end]
+                } else {
+                    &[]
+                };
 
                 // --- Offset gutter ---
                 let offset_text = format!("{:08X}:", row_offset);
@@ -127,6 +135,21 @@ pub fn show(
                     if is_cursor {
                         painter.rect_filled(hex_rect, 0.0, HexColors::CURSOR_BG);
                         painter.rect_stroke(hex_rect, 0.0, Stroke::new(1.0, HexColors::CURSOR_BORDER), StrokeKind::Inside);
+                        if edit_focus == HexPane::Hex {
+                            let nibble_x = if nibble_high {
+                                hex_x_start + col as f32 * hex_col_width
+                            } else {
+                                hex_x_start + col as f32 * hex_col_width + char_width
+                            };
+                            let underline_y = y + row_height;
+                            painter.line_segment(
+                                [
+                                    Pos2::new(nibble_x, underline_y),
+                                    Pos2::new(nibble_x + char_width, underline_y),
+                                ],
+                                Stroke::new(2.0, HexColors::CURSOR_BORDER),
+                            );
+                        }
                     } else if is_selected {
                         painter.rect_filled(hex_rect, 0.0, HexColors::SELECTION_BG);
                     } else if is_search_hit {
@@ -207,9 +230,9 @@ pub fn show(
             // Handle click (no drag) — set cursor, clear selection
             if response.clicked()
                 && let Some(pos) = response.interact_pointer_pos()
-                && let Some((offset, _pane)) = hit(pos)
+                && let Some((offset, pane)) = hit(pos)
             {
-                action = Some(HexViewAction::SetCursor(offset));
+                action = Some(HexViewAction::SetCursor(offset, pane));
             }
 
             // Handle drag — select byte range
@@ -310,6 +333,6 @@ pub enum HexPane {
 
 #[derive(Debug)]
 pub enum HexViewAction {
-    SetCursor(usize),
+    SetCursor(usize, HexPane),
     Select { start: usize, end: usize, pane: HexPane },
 }
