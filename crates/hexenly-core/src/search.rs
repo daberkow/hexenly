@@ -21,7 +21,7 @@ impl SearchPattern {
         SearchPattern::Text(s.to_string())
     }
 
-    fn needle(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         match self {
             SearchPattern::HexBytes(bytes) => bytes,
             SearchPattern::Text(text) => text.as_bytes(),
@@ -30,7 +30,7 @@ impl SearchPattern {
 }
 
 pub fn find_next(data: &[u8], pattern: &SearchPattern, start: usize) -> Option<usize> {
-    let needle = pattern.needle();
+    let needle = pattern.as_bytes();
     if needle.is_empty() || needle.len() > data.len() {
         return None;
     }
@@ -47,7 +47,7 @@ pub fn find_next(data: &[u8], pattern: &SearchPattern, start: usize) -> Option<u
 }
 
 pub fn find_prev(data: &[u8], pattern: &SearchPattern, start: usize) -> Option<usize> {
-    let needle = pattern.needle();
+    let needle = pattern.as_bytes();
     if needle.is_empty() || needle.len() > data.len() {
         return None;
     }
@@ -64,7 +64,7 @@ pub fn find_prev(data: &[u8], pattern: &SearchPattern, start: usize) -> Option<u
 }
 
 pub fn find_all(data: &[u8], pattern: &SearchPattern, limit: usize) -> Vec<usize> {
-    let needle = pattern.needle();
+    let needle = pattern.as_bytes();
     if needle.is_empty() || needle.len() > data.len() {
         return Vec::new();
     }

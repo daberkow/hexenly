@@ -61,6 +61,10 @@ pub struct HexenlyApp {
     search_match_idx: Option<usize>,
     search_error: Option<String>,
 
+    // Replace state
+    show_replace: bool,
+    replace_input: String,
+
     hex_view_state: HexViewState,
     theme_applied: bool,
 
@@ -162,6 +166,8 @@ impl HexenlyApp {
             search_matches: Vec::new(),
             search_match_idx: None,
             search_error: None,
+            show_replace: false,
+            replace_input: String::new(),
             hex_view_state: HexViewState::default(),
             theme_applied: false,
             pending_open: path,
@@ -356,6 +362,80 @@ impl HexenlyApp {
         self.scroll_to_cursor();
     }
 
+    fn build_replace_bytes(&self) -> Option<Vec<u8>> {
+        if self.search_hex_mode {
+            SearchPattern::from_hex_string(&self.replace_input).map(|p| p.as_bytes().to_vec())
+        } else {
+            Some(self.replace_input.as_bytes().to_vec())
+        }
+    }
+
+    fn replace_current(&mut self) {
+        let Some(idx) = self.search_match_idx else { return };
+        let Some(&match_offset) = self.search_matches.get(idx) else { return };
+        let Some(replace_bytes) = self.build_replace_bytes() else { return };
+        let Some(buf) = &mut self.edit_buffer else { return };
+
+        // Determine the length of the search pattern
+        let old_len = if self.search_hex_mode {
+            SearchPattern::from_hex_string(&self.search_input)
+                .map(|p| p.as_bytes().len())
+                .unwrap_or(0)
+        } else {
+            self.search_input.len()
+        };
+        if old_len == 0 {
+            return;
+        }
+
+        buf.replace_range(match_offset, old_len, &replace_bytes);
+
+        // Clamp cursor
+        if !buf.is_empty() {
+            self.cursor_offset = self.cursor_offset.min(buf.len() - 1);
+        } else {
+            self.cursor_offset = 0;
+        }
+
+        // Re-run search to update matches
+        self.do_search();
+    }
+
+    fn replace_all_matches(&mut self) {
+        let Some(replace_bytes) = self.build_replace_bytes() else { return };
+        let Some(buf) = &mut self.edit_buffer else { return };
+        if self.search_matches.is_empty() {
+            return;
+        }
+
+        let old_len = if self.search_hex_mode {
+            SearchPattern::from_hex_string(&self.search_input)
+                .map(|p| p.as_bytes().len())
+                .unwrap_or(0)
+        } else {
+            self.search_input.len()
+        };
+        if old_len == 0 {
+            return;
+        }
+
+        // Clone matches and iterate in reverse so offsets stay valid
+        let matches: Vec<usize> = self.search_matches.clone();
+        for &match_offset in matches.iter().rev() {
+            buf.replace_range(match_offset, old_len, &replace_bytes);
+        }
+
+        // Clamp cursor
+        if !buf.is_empty() {
+            self.cursor_offset = self.cursor_offset.min(buf.len() - 1);
+        } else {
+            self.cursor_offset = 0;
+        }
+
+        // Re-run search
+        self.do_search();
+    }
+
     fn goto_offset(&mut self) {
         let text = self.goto_input.trim();
         let offset = if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X"))
@@ -507,7 +587,7 @@ impl HexenlyApp {
             ctrl_end: bool,
         }
 
-        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit) = ctx.input_mut(|i| {
+        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, find_replace, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit) = ctx.input_mut(|i| {
             let force_quit = i.consume_key(egui::Modifiers::COMMAND, Key::Q);
 
             // Ctrl+Shift+S must be consumed BEFORE Ctrl+S
@@ -530,6 +610,7 @@ impl HexenlyApp {
             let open = i.consume_key(egui::Modifiers::COMMAND, Key::O);
             let goto = i.consume_key(egui::Modifiers::COMMAND, Key::G);
             let find = i.consume_key(egui::Modifiers::COMMAND, Key::F);
+            let find_replace = i.consume_key(egui::Modifiers::COMMAND, Key::H);
             let escape = i.consume_key(egui::Modifiers::NONE, Key::Escape);
             // eframe converts Ctrl+C into Event::Copy, not a key event
             let copy = i.events.iter().any(|e| matches!(e, egui::Event::Copy));
@@ -610,7 +691,7 @@ impl HexenlyApp {
                 ctrl_end: shift_ctrl_end,
             };
 
-            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit)
+            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, find_replace, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit)
         });
 
         if force_quit {
@@ -655,9 +736,16 @@ impl HexenlyApp {
             self.focus_search = self.show_search;
             self.show_goto = false;
         }
+        if find_replace {
+            self.show_search = true;
+            self.show_replace = true;
+            self.focus_search = true;
+            self.show_goto = false;
+        }
         if escape {
             self.show_goto = false;
             self.show_search = false;
+            self.show_replace = false;
         }
         // copy is handled at end of update() so nothing overwrites the clipboard
         if copy && self.selection.is_some() {
@@ -1029,6 +1117,16 @@ impl HexenlyApp {
                     self.show_goto = false;
                 }
                 if ui
+                    .add(egui::Button::new("Find & Replace").shortcut_text("Ctrl+H"))
+                    .clicked()
+                {
+                    ui.close();
+                    self.show_search = true;
+                    self.show_replace = true;
+                    self.focus_search = true;
+                    self.show_goto = false;
+                }
+                if ui
                     .add(egui::Button::new("Go to Offset").shortcut_text("Ctrl+G"))
                     .clicked()
                 {
@@ -1162,6 +1260,7 @@ impl HexenlyApp {
         if !self.show_search {
             return;
         }
+        // Row 1: Search
         ui.horizontal(|ui| {
             ui.label("Search:");
             let re = ui.text_edit_singleline(&mut self.search_input);
@@ -1195,7 +1294,25 @@ impl HexenlyApp {
             if let Some(err) = &self.search_error {
                 ui.label(RichText::new(err).color(Color32::from_rgb(220, 80, 80)));
             }
+            let replace_label = if self.show_replace { "Replace \u{25B2}" } else { "Replace \u{25BC}" };
+            if ui.button(replace_label).clicked() {
+                self.show_replace = !self.show_replace;
+            }
         });
+        // Row 2: Replace (when expanded)
+        if self.show_replace {
+            ui.horizontal(|ui| {
+                ui.label("Replace:");
+                ui.text_edit_singleline(&mut self.replace_input);
+                let has_matches = !self.search_matches.is_empty() && self.edit_buffer.is_some();
+                if ui.add_enabled(has_matches, egui::Button::new("Replace")).clicked() {
+                    self.replace_current();
+                }
+                if ui.add_enabled(has_matches, egui::Button::new("Replace All")).clicked() {
+                    self.replace_all_matches();
+                }
+            });
+        }
     }
 
     fn show_goto_bar(&mut self, ui: &mut egui::Ui) {
@@ -1438,7 +1555,7 @@ impl App for HexenlyApp {
         // Right inspector panel
         if self.show_inspector {
             SidePanel::right("inspector")
-                .default_width(220.0)
+                .default_width(260.0)
                 .show(ctx, |ui| {
                     if let Some(data) = self.data_bytes() {
                         inspector::show(ui, data, self.cursor_offset);

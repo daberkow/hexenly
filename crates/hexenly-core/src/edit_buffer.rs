@@ -31,6 +31,10 @@ pub enum EditOp {
         offset: usize,
         bytes: Vec<u8>,
     },
+    InsertRange {
+        offset: usize,
+        bytes: Vec<u8>,
+    },
     OverwriteRange {
         offset: usize,
         old_bytes: Vec<u8>,
@@ -220,6 +224,38 @@ impl EditBuffer {
         });
     }
 
+    /// Insert multiple bytes at `offset`, shifting subsequent bytes right.
+    pub fn insert_bytes(&mut self, offset: usize, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+        let offset = offset.min(self.data.len());
+        // Insert in reverse order so each byte ends up at the correct position.
+        for (i, &b) in bytes.iter().enumerate() {
+            self.data.insert(offset + i, b);
+        }
+        self.push_op(EditOp::InsertRange {
+            offset,
+            bytes: bytes.to_vec(),
+        });
+    }
+
+    /// Replace a range of bytes starting at `offset` with `new_bytes`.
+    ///
+    /// If `old_len == new_bytes.len()`, delegates to `overwrite_range`.
+    /// Otherwise, deletes the old range and inserts the new bytes.
+    pub fn replace_range(&mut self, offset: usize, old_len: usize, new_bytes: &[u8]) {
+        if old_len == new_bytes.len() {
+            self.overwrite_range(offset, new_bytes);
+        } else {
+            if old_len > 0 && offset < self.data.len() {
+                let end = (offset + old_len - 1).min(self.data.len() - 1);
+                self.delete_range(offset, end);
+            }
+            self.insert_bytes(offset, new_bytes);
+        }
+    }
+
     /// Push an operation onto the undo stack and clear the redo stack.
     fn push_op(&mut self, op: EditOp) {
         self.undo_stack.push(op);
@@ -282,6 +318,9 @@ impl EditBuffer {
                     self.data.insert(*offset + i, b);
                 }
             }
+            EditOp::InsertRange { offset, bytes } => {
+                self.data.drain(*offset..*offset + bytes.len());
+            }
             EditOp::OverwriteRange {
                 offset, old_bytes, ..
             } => {
@@ -306,6 +345,11 @@ impl EditBuffer {
             }
             EditOp::DeleteRange { offset, bytes } => {
                 self.data.drain(*offset..*offset + bytes.len());
+            }
+            EditOp::InsertRange { offset, bytes } => {
+                for (i, &b) in bytes.iter().enumerate() {
+                    self.data.insert(*offset + i, b);
+                }
             }
             EditOp::OverwriteRange {
                 offset, new_bytes, ..
@@ -708,5 +752,84 @@ mod tests {
         assert!(!buf.is_dirty());
         assert_eq!(buf.mode(), EditMode::Overwrite);
         assert!(buf.file_path().is_none());
+    }
+
+    #[test]
+    fn insert_bytes_adds_multiple() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11]);
+        buf.insert_bytes(1, &[0xAA, 0xBB, 0xCC]);
+        assert_eq!(buf.data(), &[0x00, 0xAA, 0xBB, 0xCC, 0x11]);
+        assert!(buf.is_dirty());
+    }
+
+    #[test]
+    fn insert_bytes_empty_is_noop() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00]);
+        buf.insert_bytes(0, &[]);
+        assert!(!buf.is_dirty());
+    }
+
+    #[test]
+    fn insert_bytes_undo() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11]);
+        buf.insert_bytes(1, &[0xAA, 0xBB]);
+        assert_eq!(buf.data(), &[0x00, 0xAA, 0xBB, 0x11]);
+        assert!(buf.undo());
+        assert_eq!(buf.data(), &[0x00, 0x11]);
+    }
+
+    #[test]
+    fn insert_bytes_redo() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11]);
+        buf.insert_bytes(1, &[0xAA, 0xBB]);
+        buf.undo();
+        assert!(buf.redo());
+        assert_eq!(buf.data(), &[0x00, 0xAA, 0xBB, 0x11]);
+    }
+
+    #[test]
+    fn replace_range_same_length() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11, 0x22, 0x33]);
+        buf.replace_range(1, 2, &[0xAA, 0xBB]);
+        assert_eq!(buf.data(), &[0x00, 0xAA, 0xBB, 0x33]);
+    }
+
+    #[test]
+    fn replace_range_shorter() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11, 0x22, 0x33]);
+        buf.replace_range(1, 2, &[0xAA]);
+        assert_eq!(buf.data(), &[0x00, 0xAA, 0x33]);
+    }
+
+    #[test]
+    fn replace_range_longer() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11, 0x22, 0x33]);
+        buf.replace_range(1, 2, &[0xAA, 0xBB, 0xCC]);
+        assert_eq!(buf.data(), &[0x00, 0xAA, 0xBB, 0xCC, 0x33]);
+    }
+
+    #[test]
+    fn replace_range_empty_replacement_deletes() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11, 0x22, 0x33]);
+        buf.replace_range(1, 2, &[]);
+        assert_eq!(buf.data(), &[0x00, 0x33]);
+    }
+
+    #[test]
+    fn replace_range_undo_same_length() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11, 0x22]);
+        buf.replace_range(1, 1, &[0xAA]);
+        assert!(buf.undo());
+        assert_eq!(buf.data(), &[0x00, 0x11, 0x22]);
+    }
+
+    #[test]
+    fn replace_range_undo_different_length() {
+        let mut buf = EditBuffer::from_bytes(vec![0x00, 0x11, 0x22, 0x33]);
+        buf.replace_range(1, 2, &[0xAA, 0xBB, 0xCC]);
+        // Two ops: delete_range + insert_bytes, undo both
+        assert!(buf.undo()); // undo insert
+        assert!(buf.undo()); // undo delete
+        assert_eq!(buf.data(), &[0x00, 0x11, 0x22, 0x33]);
     }
 }

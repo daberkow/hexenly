@@ -1,4 +1,4 @@
-use egui::{Grid, RichText, ScrollArea, Ui};
+use egui::{Color32, Grid, RichText, ScrollArea, Ui};
 use hexenly_core::ByteInterpreter;
 
 use crate::theme::monospace_font;
@@ -34,6 +34,22 @@ pub fn show(ui: &mut Ui, data: &[u8], cursor: usize) {
         );
     });
 
+    // Bits section
+    ui.add_space(8.0);
+    ui.label(RichText::new("Bits").strong());
+    ui.horizontal(|ui| {
+        for bit in (0..8).rev() {
+            let set = (interp.byte >> bit) & 1 == 1;
+            let text = if set { "1" } else { "0" };
+            let color = if set {
+                Color32::from_rgb(120, 200, 120)
+            } else {
+                Color32::from_gray(100)
+            };
+            ui.label(RichText::new(text).font(monospace_font()).color(color));
+        }
+    });
+
     ui.add_space(8.0);
     ui.label(RichText::new("Little-Endian").strong());
     Grid::new("inspector_le").num_columns(2).show(ui, |ui| {
@@ -58,6 +74,28 @@ pub fn show(ui: &mut Ui, data: &[u8], cursor: usize) {
         opt_row(ui, "i64", interp.i64_be.map(|v| v.to_string()));
         opt_row(ui, "f32", interp.f32_be.map(|v| format!("{v:.6e}")));
         opt_row(ui, "f64", interp.f64_be.map(|v| format!("{v:.6e}")));
+    });
+
+    // Date/Time section
+    ui.add_space(8.0);
+    ui.label(RichText::new("Date/Time").strong());
+    Grid::new("inspector_datetime").num_columns(2).show(ui, |ui| {
+        opt_row(ui, "Unix u32 LE", interp.unix_ts_u32_le.clone());
+        opt_row(ui, "Unix u32 BE", interp.unix_ts_u32_be.clone());
+        opt_row(ui, "Unix u64 LE", interp.unix_ts_u64_le.clone());
+        opt_row(ui, "Unix u64 BE", interp.unix_ts_u64_be.clone());
+        opt_row(ui, "DOS LE", interp.dos_datetime_le.clone());
+        opt_row(ui, "DOS BE", interp.dos_datetime_be.clone());
+        opt_row(ui, "FILETIME", interp.filetime_le.clone());
+    });
+
+    // Text section
+    ui.add_space(8.0);
+    ui.label(RichText::new("Text").strong());
+    Grid::new("inspector_text").num_columns(2).show(ui, |ui| {
+        opt_row(ui, "UTF-8", interp.utf8_char.clone());
+        opt_row(ui, "UTF-16 LE", interp.utf16_le_char.clone());
+        opt_row(ui, "UTF-16 BE", interp.utf16_be_char.clone());
     });
     }); // ScrollArea
 }
