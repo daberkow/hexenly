@@ -11,7 +11,7 @@ pub fn show(ui: &mut Ui, data: &[u8], cursor: usize, colors: &HexColors) -> bool
     ui.horizontal(|ui| {
         ui.heading("Inspector");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("\u{2715}").clicked() {
+            if ui.small_button("x").clicked() {
                 close = true;
             }
         });

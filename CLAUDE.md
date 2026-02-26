@@ -22,7 +22,7 @@ cargo run -p hexenly-app -- path/to/file.bin
 
 - **Memory-mapped files** via `memmap2` for large file support
 - **`TemplateColor` not `egui::Color32`** — keeps hexenly-templates GUI-agnostic; conversion happens at the render boundary in hexenly-app
-- **`include_str!` for built-in templates** — PNG, BMP, ELF, ZIP templates baked into the binary, loaded in `app.rs::HexenlyApp::new()`
+- **`include_str!` for built-in templates** — 32 templates across 9 categories baked into the binary, loaded in `app.rs::HexenlyApp::new()`
 - **Simple per-byte region iteration** in hex view — no interval tree needed (<20 regions, <500 visible bytes)
 - **Sequential field offsets** — fields with no explicit offset follow the previous field
 - **Custom serde Deserialize** for `OffsetExpr` and `LengthExpr` — integers parse as absolute/fixed, strings like `"after:id"`, `"from:id"`, `"to_end"` parse as expressions
@@ -31,9 +31,9 @@ cargo run -p hexenly-app -- path/to/file.bin
 
 - **Phase 1** (complete): Hex viewer, mmap file reading, painter-based hex grid, byte inspector, search, go-to-offset
 - **Phase 2** (complete): Template engine — TOML parsing, resolution engine (static offsets/lengths), overlay rendering, template browser sidebar, structure map panel, auto-detection via magic bytes, 4 built-in templates
-- **Phase 3** (complete): Dynamic expressions (`AfterField`, `FromField`, `Expr` offsets/lengths), repeating regions (`Count`, `UntilEof`, `UntilMagic`), conditional regions/fields, arithmetic expressions, enum/bitflag display, 7 built-in templates
+- **Phase 3** (complete): Dynamic expressions (`AfterField`, `FromField`, `Expr` offsets/lengths), repeating regions (`Count`, `UntilEof`, `UntilMagic`), conditional regions/fields, arithmetic expressions, enum/bitflag display
+- **Phase 4** (complete): Template layers & chaining — multi-layer rendering at arbitrary offsets, `FieldType::Computed` with arithmetic expressions, `apply_template` for auto-chaining (`TemplateLink`), `TemplateLayer` with `LayerSource` (AutoDetected/Manual/LinkedFrom), layers panel with tree view, right-click "Apply template here" context menu, 32 built-in templates across 9 categories
 - **Future ideas**:
-  - Nested template overlay — select a region and apply a different template to it (e.g., read a disk image as FAT32, then overlay MBR on the first 512 bytes)
   - Find & replace (hex and ASCII patterns)
   - Copy/paste (as hex, ASCII, C array, Python bytes, etc.)
   - Data visualization (entropy graph, byte histogram, strings view)
@@ -46,8 +46,11 @@ cargo run -p hexenly-app -- path/to/file.bin
 Templates are TOML files in `templates/` grouped by category subdirectory. Schema lives in `hexenly-templates/src/schema.rs`. Key types:
 
 - `Template` — name, description, extensions, magic bytes, endianness, regions
-- `Region` — id, label, color (#RRGGBB), offset, length, fields
-- `Field` — id, label, field_type, length, role, description
+- `Region` — id, label, color (#RRGGBB), offset, length, fields, repeat, condition
+- `Field` — id, label, field_type, length, role, description, expression, apply_template, enum_values, bit_flags, color, condition
+- `FieldType::Computed` — virtual field evaluating an arithmetic expression; `length = 0`, no bytes read
+- `TemplateLink` — template_name, offset, source_field_id (emitted by computed fields with `apply_template`)
+- `TemplateLayer` — registry_index, base_offset, resolved template, `LayerSource` (AutoDetected/Manual/LinkedFrom)
 
 ## Code Conventions
 

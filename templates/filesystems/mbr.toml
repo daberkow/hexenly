@@ -1,6 +1,6 @@
 name = "MBR"
 description = "Master Boot Record — boot code, four partition entries, and boot signature"
-extensions = ["img", "bin", "mbr"]
+extensions = ["img", "bin", "mbr", "dd", "raw"]
 endian = "little"
 
 [[regions]]

@@ -1,0 +1,173 @@
+name = "EBR"
+description = "Extended Boot Record — partition entry for a logical drive within an extended partition"
+extensions = ["img", "bin", "raw", "dd"]
+endian = "little"
+
+[[regions]]
+id = "ebr_reserved"
+label = "Reserved Area"
+color = "#7F8C8D"
+offset = 0
+length = 446
+description = "Typically all zeros (no boot code in EBR)"
+
+[[regions.fields]]
+id = "reserved_data"
+label = "Reserved"
+field_type = "bytes"
+length = 446
+role = "padding"
+description = "Unused space (all zeros in standard EBRs)"
+
+[[regions]]
+id = "logical_partition"
+label = "Logical Partition Entry"
+color = "#2ECC71"
+offset = 446
+length = 16
+group = "partition_table"
+description = "Partition entry for the logical drive in this EBR"
+
+[[regions.fields]]
+id = "lp_status"
+label = "Status / Active Flag"
+field_type = "u8"
+length = 1
+description = "0x80 = active/bootable, 0x00 = inactive"
+
+[regions.fields.enum_values]
+"0" = "Inactive"
+"128" = "Active (Bootable)"
+
+[[regions.fields]]
+id = "lp_chs_first"
+label = "CHS First Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of first sector"
+
+[[regions.fields]]
+id = "lp_type"
+label = "Partition Type"
+field_type = "u8"
+length = 1
+description = "Filesystem type of the logical partition"
+
+[regions.fields.enum_values]
+"0" = "Empty"
+"1" = "FAT12"
+"4" = "FAT16 (<32 MB)"
+"6" = "FAT16B (>32 MB)"
+"7" = "NTFS/exFAT"
+"11" = "FAT32"
+"12" = "FAT32 LBA"
+"14" = "FAT16 LBA"
+"130" = "Linux swap"
+"131" = "Linux"
+
+[[regions.fields]]
+id = "lp_chs_last"
+label = "CHS Last Sector"
+field_type = "bytes"
+length = 3
+description = "Cylinder-Head-Sector address of last sector"
+
+[[regions.fields]]
+id = "lp_lba_first"
+label = "LBA First Sector (relative)"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Starting sector of logical partition, relative to this EBR"
+
+[[regions.fields]]
+id = "lp_sector_count"
+label = "Sector Count"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Total number of sectors in logical partition"
+
+[[regions.fields]]
+id = "lp_byte_offset"
+label = "Logical Partition Byte Offset"
+field_type = "computed"
+length = 0
+expression = "expr:lp_lba_first * 512"
+role = "offset"
+apply_template = "FAT16"
+description = "Byte offset of logical partition relative to this EBR — auto-applies FAT16"
+
+[[regions]]
+id = "next_ebr"
+label = "Next EBR Entry"
+color = "#3498DB"
+offset = 462
+length = 16
+group = "partition_table"
+description = "Points to next EBR in chain (all zeros if last)"
+
+[[regions.fields]]
+id = "next_status"
+label = "Status"
+field_type = "u8"
+length = 1
+description = "Always 0x00"
+
+[[regions.fields]]
+id = "next_chs_first"
+label = "CHS First Sector"
+field_type = "bytes"
+length = 3
+description = "CHS of next EBR (or zeros)"
+
+[[regions.fields]]
+id = "next_type"
+label = "Partition Type"
+field_type = "u8"
+length = 1
+description = "0x05 = another Extended partition follows, 0x00 = end of chain"
+
+[regions.fields.enum_values]
+"0" = "End of Chain"
+"5" = "Extended (next EBR)"
+"15" = "Extended LBA (next EBR)"
+
+[[regions.fields]]
+id = "next_chs_last"
+label = "CHS Last Sector"
+field_type = "bytes"
+length = 3
+description = "CHS of last sector of next EBR (or zeros)"
+
+[[regions.fields]]
+id = "next_lba_first"
+label = "Next EBR LBA (relative)"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Starting sector of next EBR, relative to extended partition start"
+
+[[regions.fields]]
+id = "next_sector_count"
+label = "Next EBR Sector Count"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Sector count of next EBR entry (or 0)"
+
+[[regions]]
+id = "ebr_signature"
+label = "EBR Signature"
+color = "#E74C3C"
+offset = 510
+length = 2
+description = "Valid EBR marker"
+
+[[regions.fields]]
+id = "signature"
+label = "Signature"
+field_type = "u16_le"
+length = 2
+role = "magic"
+description = "0xAA55 — EBR signature"

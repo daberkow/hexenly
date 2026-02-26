@@ -8,7 +8,6 @@ use hexenly_templates::loader::TemplateRegistry;
 pub enum TemplateBrowserAction {
     Select(usize),
     Deselect,
-    Close,
 }
 
 /// Render the template browser. Returns an action if the user selected or deselected a template.
@@ -21,15 +20,7 @@ pub fn show(
 ) -> Option<TemplateBrowserAction> {
     let mut action = None;
 
-    ui.horizontal(|ui| {
-        ui.heading("Templates");
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("\u{2715}").clicked() {
-                action = Some(TemplateBrowserAction::Close);
-            }
-        });
-    });
-    ui.separator();
+    ui.label(RichText::new("Template Catalog").strong());
 
     // Search filter
     ui.horizontal(|ui| {
@@ -46,24 +37,37 @@ pub fn show(
     ui.add_space(4.0);
 
     let filter_lower = filter.to_lowercase();
+    let is_searching = !filter_lower.is_empty();
 
     // Group entries by category
-    let mut categories: std::collections::BTreeMap<&str, Vec<(usize, &str)>> =
+    let mut categories: std::collections::BTreeMap<&str, Vec<(usize, &str, String)>> =
         std::collections::BTreeMap::new();
     for (idx, entry) in registry.entries.iter().enumerate() {
         let name = &entry.template.name;
-        if !filter_lower.is_empty() && !name.to_lowercase().contains(&filter_lower) {
-            continue;
+        if !filter_lower.is_empty() {
+            let name_match = name.to_lowercase().contains(&filter_lower);
+            let ext_match = entry
+                .template
+                .extensions
+                .iter()
+                .any(|e| e.to_lowercase().contains(&filter_lower));
+            let desc_match = entry.template.description.to_lowercase().contains(&filter_lower);
+            if !name_match && !ext_match && !desc_match {
+                continue;
+            }
+        }
+        let mut tooltip = entry.template.description.clone();
+        if !entry.template.extensions.is_empty() {
+            tooltip.push_str(&format!("\nExtensions: {}", entry.template.extensions.join(", ")));
         }
         categories
             .entry(&entry.category)
             .or_default()
-            .push((idx, name));
+            .push((idx, name, tooltip));
     }
 
     ScrollArea::vertical()
         .auto_shrink([false, false])
-        .max_height(ui.available_height() - 120.0)
         .show(ui, |ui| {
             if categories.is_empty() {
                 ui.label("No templates found");
@@ -71,41 +75,27 @@ pub fn show(
             }
 
             for (category, entries) in &categories {
-                egui::CollapsingHeader::new(RichText::new(*category).strong())
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        for &(idx, name) in entries {
-                            let is_active = active_indices.contains(&idx);
-                            let response = ui.selectable_label(is_active, name);
+                let header = egui::CollapsingHeader::new(RichText::new(*category).strong())
+                    .default_open(false);
+                // Force categories open when searching so results are visible
+                let header = if is_searching { header.open(Some(true)) } else { header };
+                header.show(ui, |ui| {
+                        for (idx, name, tooltip) in entries {
+                            let is_active = active_indices.contains(idx);
+                            let response = ui
+                                .selectable_label(is_active, *name)
+                                .on_hover_text(tooltip);
                             if response.clicked() {
                                 if is_active {
                                     action = Some(TemplateBrowserAction::Deselect);
                                 } else {
-                                    action = Some(TemplateBrowserAction::Select(idx));
+                                    action = Some(TemplateBrowserAction::Select(*idx));
                                 }
                             }
                         }
                     });
             }
         });
-
-    // Show selected template metadata
-    ui.separator();
-    if let Some(&idx) = active_indices.first() {
-        if let Some(entry) = registry.entries.get(idx) {
-            let t = &entry.template;
-            ui.label(RichText::new(&t.name).strong());
-            ui.label(&t.description);
-            if !t.extensions.is_empty() {
-                ui.label(format!("Extensions: {}", t.extensions.join(", ")));
-            }
-            if let Some(magic) = &t.magic {
-                ui.label(format!("Magic: {magic}"));
-            }
-        }
-    } else {
-        ui.label("No template selected");
-    }
 
     action
 }

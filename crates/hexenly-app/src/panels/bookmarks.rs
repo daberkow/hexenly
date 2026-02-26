@@ -24,7 +24,7 @@ pub fn show(
     ui.horizontal(|ui| {
         ui.heading("Bookmarks");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("\u{2715}").clicked() {
+            if ui.small_button("x").clicked() {
                 action = Some(BookmarkAction::Close);
             }
         });

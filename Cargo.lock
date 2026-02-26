@@ -1487,7 +1487,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hexenly-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "eframe",
@@ -1504,7 +1504,7 @@ dependencies = [
 
 [[package]]
 name = "hexenly-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "memmap2",
  "serde",
@@ -1514,7 +1514,7 @@ dependencies = [
 
 [[package]]
 name = "hexenly-templates"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_yaml",

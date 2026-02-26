@@ -61,10 +61,13 @@ You can also just drag and drop a file onto the window.
 - Save and Save As with atomic writes
 
 **Templates**
-- 15 built-in templates across images, archives, executables, filesystems, and media
+- 32 built-in templates across 9 categories (images, archives, executables, filesystems, media, documents, databases, fonts, networking)
 - Auto-detection via magic bytes or file extension
 - Structure panel with decoded field values — click any field to jump to its offset
 - Color-coded hex overlay showing which bytes belong to which region
+- Template layers — apply multiple templates at different offsets simultaneously
+- Computed fields with arithmetic expressions and automatic template chaining
+- Right-click any byte to apply a template at that offset
 - Write your own templates in TOML (see `templates/` for examples)
 
 ## Keyboard Shortcuts
@@ -79,6 +82,9 @@ You can also just drag and drop a file onto the window.
 | `Ctrl+F` | Search |
 | `Ctrl+G` | Go to offset |
 | `Ctrl+A` | Select all |
+| `Alt+Left` | Navigate back |
+| `Alt+Right` | Navigate forward |
+| `Shift+Arrows` | Extend selection |
 | `Insert` | Toggle insert/overwrite mode |
 | `Esc` | Close dialog |
 
@@ -86,26 +92,68 @@ You can also just drag and drop a file onto the window.
 
 | Format | Coverage |
 |--------|----------|
+| **Archives** | |
+| ZIP | Local file entries (repeating, dynamic field lengths) |
+| TAR | USTAR file header block |
+| GZIP | Header with flags and OS identification |
+| 7z | Signature header + start header |
+| XZ | Stream header + block header |
+| **Databases** | |
+| SQLite | Database header (first 100 bytes) |
+| **Documents** | |
+| PDF | File header + cross-reference table |
+| **Executables** | |
+| ELF | Identification + 64-bit header |
+| PE/COFF | DOS header + PE signature + COFF + optional header |
+| Mach-O | Header + load commands |
+| Java Class | Magic + version + constant pool count |
+| WebAssembly | Magic + version + type section |
+| **Filesystems** | |
+| FAT32 | Boot sector + BPB + FSInfo |
+| FAT16 | Boot sector + BPB |
+| ISO 9660 | Primary volume descriptor + path table |
+| MBR | Boot code + 4 partition entries + computed offsets |
+| GPT | GPT header + first partition entry |
+| EBR | Extended boot record with template chaining |
+| Cybiko CFS | Xtreme flash filesystem (boot blocks + file pages) |
+| **Fonts** | |
+| TrueType/OpenType | Offset table + table directory |
 | **Images** | |
 | PNG | Signature + IHDR chunk |
 | BMP | File header + DIB header |
 | GIF | Header + logical screen descriptor |
 | JPEG | SOI marker + APP0/JFIF segment |
-| **Archives** | |
-| ZIP | Local file entries (repeating, dynamic field lengths) |
-| TAR | USTAR file header block |
-| GZIP | Header with flags and OS identification |
-| **Executables** | |
-| ELF | Identification + 64-bit header |
-| PE/COFF | DOS header + PE signature + COFF + optional header |
-| **Filesystems** | |
-| FAT32 | Boot sector + BPB + FSInfo |
-| ISO 9660 | Primary volume descriptor + path table |
-| MBR | Boot code + 4 partition entries + signature |
-| GPT | GPT header + first partition entry |
-| Cybiko CFS | Xtreme flash filesystem (boot blocks + file pages) |
+| TIFF | Header + first IFD |
+| ICO | Icon directory + first entry |
+| WebP | RIFF header + VP8/VP8L chunk |
 | **Media** | |
 | WAV | RIFF header + format chunk + data chunk |
+| MP3 | ID3v2 header + first frame header |
+| FLAC | Stream marker + STREAMINFO block |
+| OGG | Page header + Vorbis identification |
+| **Networking** | |
+| PCAP | Global header + first packet header |
+
+## Example: Exploring a Disk Image with Template Chaining
+
+Hexenly's template layers let you overlay multiple templates at different offsets, with automatic chaining. Here's how to explore a DOS hard drive image:
+
+1. **Open the disk image** — the MBR template auto-detects at offset `0x0`, showing boot code, partition table entries, and the boot signature.
+
+2. **Read the partition offset** — in the Structure panel, the MBR's computed "Partition 1 Byte Offset" field shows `0x3F000` (derived from the partition's LBA start multiplied by 512).
+
+3. **Apply EBR at that offset** — click the computed offset to jump there. The "Apply at offset" field in the Template Browser updates to match. Select the EBR template.
+
+4. **Automatic FAT16 chaining** — the EBR's computed field calculates the logical partition offset (relative LBA 63 x 512 = `0x7E00` from the EBR), and its `apply_template` directive automatically chains the FAT16 template at `0x46E00`.
+
+5. **Three layers active** — the Active Layers panel shows the chain as a tree:
+   ```
+   MBR @ 0x0 (auto)
+   └ EBR @ 0x3F000 (manual)
+     └ FAT16 @ 0x46E00 (linked)
+   ```
+
+The hex view now shows color-coded regions from all three templates, and the Structure panel has collapsible sections for each.
 
 ## Writing Templates
 

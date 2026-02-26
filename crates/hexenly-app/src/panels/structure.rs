@@ -23,7 +23,7 @@ pub fn show(
     ui.horizontal(|ui| {
         ui.heading("Structure");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("\u{2715}").clicked() {
+            if ui.small_button("x").clicked() {
                 action = Some(StructureAction::Close);
             }
         });
@@ -46,7 +46,7 @@ pub fn show(
 
                             let region_header = egui::CollapsingHeader::new(
                                 RichText::new(format!(
-                                    "\u{25CF} {}  [0x{:X}..0x{:X}]  {} bytes",
+                                    "* {}  [0x{:X}..0x{:X}]  {} bytes",
                                     region.label,
                                     region.offset,
                                     region.end_exclusive(),

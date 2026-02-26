@@ -81,8 +81,8 @@ impl Default for PanelVisibility {
             goto: false,
             search: false,
             replace: false,
-            template_browser: false,
-            structure: false,
+            template_browser: true,
+            structure: true,
             bookmarks: false,
         }
     }
@@ -102,6 +102,7 @@ struct SearchState {
 #[derive(Default)]
 struct GotoState {
     input: String,
+    focus: bool,
 }
 
 /// Top-level application state, implementing [`eframe::App`].
@@ -138,6 +139,10 @@ pub struct HexenlyApp {
 
     bookmarks: Vec<Bookmark>,
     recent_files: Vec<PathBuf>,
+
+    /// Offset navigation history (back/forward).
+    nav_back: Vec<usize>,
+    nav_forward: Vec<usize>,
 
     /// True = waiting for high nibble (first digit), false = waiting for low nibble.
     nibble_high: bool,
@@ -197,6 +202,11 @@ impl HexenlyApp {
             "filesystems",
             "MBR",
             include_str!("../../../templates/filesystems/mbr.toml"),
+        );
+        registry.load_builtin(
+            "filesystems",
+            "EBR",
+            include_str!("../../../templates/filesystems/ebr.toml"),
         );
         registry.load_builtin(
             "filesystems",
@@ -345,6 +355,8 @@ impl HexenlyApp {
             notifications,
             bookmarks: Vec::new(),
             recent_files: load_recent_files(),
+            nav_back: Vec::new(),
+            nav_forward: Vec::new(),
             nibble_high: true,
             edit_focus: HexPane::Hex,
             force_closing: false,
@@ -377,7 +389,10 @@ impl HexenlyApp {
 
                 self.edit_buffer = Some(EditBuffer::from_file(file_ref));
                 self.cursor_offset = 0;
+                self.template_apply_offset = "0x0".to_string();
                 self.selection = None;
+                self.nav_back.clear();
+                self.nav_forward.clear();
                 self.nibble_high = true;
                 self.search.matches.clear();
                 self.search.match_idx = None;
@@ -466,9 +481,10 @@ impl HexenlyApp {
         });
 
         // Process template links (auto-chain)
+        // Link offsets are relative to the engine's slice, so add base_offset to make them absolute.
         for link in result.template_links {
             if let Some(idx) = self.template_registry.entries.iter().position(|e| e.template.name == link.template_name) {
-                self.add_template_layer(idx, link.offset, LayerSource::LinkedFrom(link.source_field_id.clone()));
+                self.add_template_layer(idx, base_offset + link.offset, LayerSource::LinkedFrom(link.source_field_id.clone()));
             }
         }
     }
@@ -528,17 +544,21 @@ impl HexenlyApp {
         // Fall back to extension matching
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             let matches = self.template_registry.detect_for_extension(ext);
-            if let Some(entry) = matches.first() {
+            if matches.len() == 1 {
                 let idx = self
                     .template_registry
                     .entries
                     .iter()
-                    .position(|e| std::ptr::eq(e, *entry));
+                    .position(|e| std::ptr::eq(e, matches[0]));
                 if let Some(idx) = idx {
                     self.add_template_layer(idx, 0, LayerSource::AutoDetected);
                     self.panels.structure = true;
                     return;
                 }
+            } else if matches.len() > 1 {
+                // Multiple templates match this extension — let the user choose
+                self.panels.template_browser = true;
+                return;
             }
         }
 
@@ -563,6 +583,7 @@ impl HexenlyApp {
 
         self.search.matches = find_all(data, &pattern, MAX_SEARCH_RESULTS);
         if let Some(&first) = self.search.matches.first() {
+            self.push_nav_history();
             self.search.match_idx = Some(0);
             self.cursor_offset = first;
             self.scroll_to_cursor();
@@ -580,6 +601,7 @@ impl HexenlyApp {
             .match_idx
             .map(|i| (i + 1) % self.search.matches.len())
             .unwrap_or(0);
+        self.push_nav_history();
         self.search.match_idx = Some(idx);
         self.cursor_offset = self.search.matches[idx];
         self.scroll_to_cursor();
@@ -595,6 +617,7 @@ impl HexenlyApp {
             .match_idx
             .map(|i| (i + len - 1) % len)
             .unwrap_or(len - 1);
+        self.push_nav_history();
         self.search.match_idx = Some(idx);
         self.cursor_offset = self.search.matches[idx];
         self.scroll_to_cursor();
@@ -688,6 +711,7 @@ impl HexenlyApp {
             && len > 0
             && off < len
         {
+            self.push_nav_history();
             self.cursor_offset = off;
             self.selection = None;
             self.scroll_to_cursor();
@@ -748,6 +772,7 @@ impl HexenlyApp {
         self.selection = None;
         self.selection_anchor = None;
         self.nibble_high = true;
+        self.sync_template_offset();
         self.scroll_to_cursor();
     }
 
@@ -761,6 +786,7 @@ impl HexenlyApp {
         self.selection = None;
         self.selection_anchor = None;
         self.nibble_high = true;
+        self.sync_template_offset();
         self.scroll_to_cursor();
     }
 
@@ -780,6 +806,7 @@ impl HexenlyApp {
         }
         self.selection = Some(Selection::new(anchor, self.cursor_offset));
         self.nibble_high = true;
+        self.sync_template_offset();
         self.scroll_to_cursor();
     }
 
@@ -794,7 +821,52 @@ impl HexenlyApp {
         self.cursor_offset = offset.min(len.saturating_sub(1));
         self.selection = Some(Selection::new(anchor, self.cursor_offset));
         self.nibble_high = true;
+        self.sync_template_offset();
         self.scroll_to_cursor();
+    }
+
+    /// Push the current cursor position onto the back stack (for significant jumps).
+    fn push_nav_history(&mut self) {
+        // Only push if different from top of stack
+        if self.nav_back.last() != Some(&self.cursor_offset) {
+            self.nav_back.push(self.cursor_offset);
+            // Cap history at 100 entries
+            if self.nav_back.len() > 100 {
+                self.nav_back.remove(0);
+            }
+            self.nav_forward.clear();
+        }
+    }
+
+    /// Navigate back in offset history.
+    fn nav_back(&mut self) {
+        if let Some(prev) = self.nav_back.pop() {
+            self.nav_forward.push(self.cursor_offset);
+            self.cursor_offset = prev;
+            self.selection = None;
+            self.selection_anchor = None;
+            self.nibble_high = true;
+            self.sync_template_offset();
+            self.scroll_to_cursor();
+        }
+    }
+
+    /// Navigate forward in offset history.
+    fn nav_forward(&mut self) {
+        if let Some(next) = self.nav_forward.pop() {
+            self.nav_back.push(self.cursor_offset);
+            self.cursor_offset = next;
+            self.selection = None;
+            self.selection_anchor = None;
+            self.nibble_high = true;
+            self.sync_template_offset();
+            self.scroll_to_cursor();
+        }
+    }
+
+    /// Sync the template offset field to match the current cursor position.
+    fn sync_template_offset(&mut self) {
+        self.template_apply_offset = format!("0x{:X}", self.cursor_offset);
     }
 
     fn handle_shortcuts(&mut self, ctx: &Context) {
@@ -812,21 +884,7 @@ impl HexenlyApp {
             ctrl_end: bool,
         }
 
-        #[allow(clippy::struct_excessive_bools)]
-        struct ShiftNavKeys {
-            left: bool,
-            right: bool,
-            up: bool,
-            down: bool,
-            page_up: bool,
-            page_down: bool,
-            home: bool,
-            end: bool,
-            ctrl_home: bool,
-            ctrl_end: bool,
-        }
-
-        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, find_replace, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit) = ctx.input_mut(|i| {
+        let (open, save, save_as, undo, redo, select_all, insert_key, goto, find, find_replace, escape, copy, nav, shift_held, add_bookmark, prev_bookmark, next_bookmark, nav_back, nav_fwd, delete, backspace, force_quit) = ctx.input_mut(|i| {
             let force_quit = i.consume_key(egui::Modifiers::COMMAND, Key::Q);
 
             // Ctrl+Shift+S must be consumed BEFORE Ctrl+S
@@ -857,19 +915,11 @@ impl HexenlyApp {
             // Ctrl+B to add bookmark
             let add_bookmark = i.consume_key(egui::Modifiers::COMMAND, Key::B);
 
-            // Ctrl+Home/End must be consumed before plain Home/End
-            let ctrl_home = i.consume_key(egui::Modifiers::COMMAND, Key::Home);
-            let ctrl_end = i.consume_key(egui::Modifiers::COMMAND, Key::End);
-
-            // Shift+Ctrl+Home/End must be consumed before Shift+Home/End
-            let shift_ctrl_home = i.consume_key(
-                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
-                Key::Home,
-            );
-            let shift_ctrl_end = i.consume_key(
-                egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT),
-                Key::End,
-            );
+            // Ctrl+Home/End — try Shift+Ctrl first, then Ctrl alone
+            let ctrl_home = i.consume_key(egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT), Key::Home)
+                || i.consume_key(egui::Modifiers::COMMAND, Key::Home);
+            let ctrl_end = i.consume_key(egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT), Key::End)
+                || i.consume_key(egui::Modifiers::COMMAND, Key::End);
 
             // Ctrl+Shift+Up/Down for bookmark navigation — must be consumed
             // BEFORE Shift+Up/Down to prevent the simpler modifier match
@@ -883,23 +933,29 @@ impl HexenlyApp {
                 Key::ArrowDown,
             );
 
-            let left = i.consume_key(egui::Modifiers::NONE, Key::ArrowLeft);
-            let right = i.consume_key(egui::Modifiers::NONE, Key::ArrowRight);
-            let up = i.consume_key(egui::Modifiers::NONE, Key::ArrowUp);
-            let down = i.consume_key(egui::Modifiers::NONE, Key::ArrowDown);
-            let page_up = i.consume_key(egui::Modifiers::NONE, Key::PageUp);
-            let page_down = i.consume_key(egui::Modifiers::NONE, Key::PageDown);
-            let home = i.consume_key(egui::Modifiers::NONE, Key::Home);
-            let end = i.consume_key(egui::Modifiers::NONE, Key::End);
+            // Alt+Left/Right for back/forward navigation
+            let nav_back = i.consume_key(egui::Modifiers::ALT, Key::ArrowLeft);
+            let nav_fwd = i.consume_key(egui::Modifiers::ALT, Key::ArrowRight);
 
-            let shift_left = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowLeft);
-            let shift_right = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowRight);
-            let shift_up = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowUp);
-            let shift_down = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowDown);
-            let shift_page_up = i.consume_key(egui::Modifiers::SHIFT, Key::PageUp);
-            let shift_page_down = i.consume_key(egui::Modifiers::SHIFT, Key::PageDown);
-            let shift_home = i.consume_key(egui::Modifiers::SHIFT, Key::Home);
-            let shift_end = i.consume_key(egui::Modifiers::SHIFT, Key::End);
+            // Try Shift variant first, then plain — captures the key regardless
+            // of how the platform reports modifier state on key events.
+            let shift_held = i.modifiers.shift;
+            let left = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowLeft)
+                || i.consume_key(egui::Modifiers::NONE, Key::ArrowLeft);
+            let right = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowRight)
+                || i.consume_key(egui::Modifiers::NONE, Key::ArrowRight);
+            let up = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowUp)
+                || i.consume_key(egui::Modifiers::NONE, Key::ArrowUp);
+            let down = i.consume_key(egui::Modifiers::SHIFT, Key::ArrowDown)
+                || i.consume_key(egui::Modifiers::NONE, Key::ArrowDown);
+            let page_up = i.consume_key(egui::Modifiers::SHIFT, Key::PageUp)
+                || i.consume_key(egui::Modifiers::NONE, Key::PageUp);
+            let page_down = i.consume_key(egui::Modifiers::SHIFT, Key::PageDown)
+                || i.consume_key(egui::Modifiers::NONE, Key::PageDown);
+            let home = i.consume_key(egui::Modifiers::SHIFT, Key::Home)
+                || i.consume_key(egui::Modifiers::NONE, Key::Home);
+            let end = i.consume_key(egui::Modifiers::SHIFT, Key::End)
+                || i.consume_key(egui::Modifiers::NONE, Key::End);
 
             let delete = i.consume_key(egui::Modifiers::NONE, Key::Delete);
             let backspace = i.consume_key(egui::Modifiers::NONE, Key::Backspace);
@@ -917,20 +973,7 @@ impl HexenlyApp {
                 ctrl_end,
             };
 
-            let shift_nav = ShiftNavKeys {
-                left: shift_left,
-                right: shift_right,
-                up: shift_up,
-                down: shift_down,
-                page_up: shift_page_up,
-                page_down: shift_page_down,
-                home: shift_home,
-                end: shift_end,
-                ctrl_home: shift_ctrl_home,
-                ctrl_end: shift_ctrl_end,
-            };
-
-            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, find_replace, escape, copy, nav, shift_nav, add_bookmark, prev_bookmark, next_bookmark, delete, backspace, force_quit)
+            (open, save, save_as, undo, redo, select_all, insert_key, goto, find, find_replace, escape, copy, nav, shift_held, add_bookmark, prev_bookmark, next_bookmark, nav_back, nav_fwd, delete, backspace, force_quit)
         });
 
         if force_quit {
@@ -968,6 +1011,7 @@ impl HexenlyApp {
         }
         if goto {
             self.panels.goto = !self.panels.goto;
+            self.goto.focus = self.panels.goto;
             self.panels.search = false;
         }
         if find {
@@ -1022,6 +1066,14 @@ impl HexenlyApp {
             self.set_cursor_abs(off);
         }
 
+        // Alt+Left/Right — back/forward navigation
+        if nav_back {
+            self.nav_back();
+        }
+        if nav_fwd {
+            self.nav_forward();
+        }
+
         // Delete / Backspace
         if (delete || backspace) && self.edit_buffer.is_some() {
             self.handle_delete(delete);
@@ -1031,73 +1083,49 @@ impl HexenlyApp {
         if self.data_len() > 0 {
             let data_len = self.data_len();
 
+            // Navigation: shift_held selects instead of moving
             if nav.left {
-                self.move_cursor(-1);
+                if shift_held { self.move_cursor_select(-1); }
+                else { self.move_cursor(-1); }
             }
             if nav.right {
-                self.move_cursor(1);
+                if shift_held { self.move_cursor_select(1); }
+                else { self.move_cursor(1); }
             }
             if nav.up {
-                self.move_cursor(-(self.columns as isize));
+                if shift_held { self.move_cursor_select(-(self.columns as isize)); }
+                else { self.move_cursor(-(self.columns as isize)); }
             }
             if nav.down {
-                self.move_cursor(self.columns as isize);
+                if shift_held { self.move_cursor_select(self.columns as isize); }
+                else { self.move_cursor(self.columns as isize); }
             }
             if nav.page_up {
-                self.move_cursor(-((self.columns * PAGE_SCROLL_ROWS) as isize));
+                if shift_held { self.move_cursor_select(-((self.columns * PAGE_SCROLL_ROWS) as isize)); }
+                else { self.move_cursor(-((self.columns * PAGE_SCROLL_ROWS) as isize)); }
             }
             if nav.page_down {
-                self.move_cursor((self.columns * PAGE_SCROLL_ROWS) as isize);
+                if shift_held { self.move_cursor_select((self.columns * PAGE_SCROLL_ROWS) as isize); }
+                else { self.move_cursor((self.columns * PAGE_SCROLL_ROWS) as isize); }
             }
             if nav.home {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
-                self.set_cursor_abs(row_start);
+                if shift_held { self.set_cursor_select(row_start); }
+                else { self.set_cursor_abs(row_start); }
             }
             if nav.end {
                 let row_start = (self.cursor_offset / self.columns) * self.columns;
                 let row_end = (row_start + self.columns - 1).min(data_len.saturating_sub(1));
-                self.set_cursor_abs(row_end);
+                if shift_held { self.set_cursor_select(row_end); }
+                else { self.set_cursor_abs(row_end); }
             }
             if nav.ctrl_home {
-                self.set_cursor_abs(0);
+                if shift_held { self.set_cursor_select(0); }
+                else { self.set_cursor_abs(0); }
             }
             if nav.ctrl_end {
-                self.set_cursor_abs(data_len.saturating_sub(1));
-            }
-
-            // Shift+key selection
-            if shift_nav.left {
-                self.move_cursor_select(-1);
-            }
-            if shift_nav.right {
-                self.move_cursor_select(1);
-            }
-            if shift_nav.up {
-                self.move_cursor_select(-(self.columns as isize));
-            }
-            if shift_nav.down {
-                self.move_cursor_select(self.columns as isize);
-            }
-            if shift_nav.page_up {
-                self.move_cursor_select(-((self.columns * PAGE_SCROLL_ROWS) as isize));
-            }
-            if shift_nav.page_down {
-                self.move_cursor_select((self.columns * PAGE_SCROLL_ROWS) as isize);
-            }
-            if shift_nav.home {
-                let row_start = (self.cursor_offset / self.columns) * self.columns;
-                self.set_cursor_select(row_start);
-            }
-            if shift_nav.end {
-                let row_start = (self.cursor_offset / self.columns) * self.columns;
-                let row_end = (row_start + self.columns - 1).min(data_len.saturating_sub(1));
-                self.set_cursor_select(row_end);
-            }
-            if shift_nav.ctrl_home {
-                self.set_cursor_select(0);
-            }
-            if shift_nav.ctrl_end {
-                self.set_cursor_select(data_len.saturating_sub(1));
+                if shift_held { self.set_cursor_select(data_len.saturating_sub(1)); }
+                else { self.set_cursor_abs(data_len.saturating_sub(1)); }
             }
         }
     }
@@ -1405,6 +1433,7 @@ impl HexenlyApp {
                 {
                     ui.close();
                     self.panels.goto = !self.panels.goto;
+                    self.goto.focus = self.panels.goto;
                     self.panels.search = false;
                 }
                 ui.separator();
@@ -1587,7 +1616,7 @@ impl HexenlyApp {
             if let Some(err) = &self.search.error {
                 ui.label(RichText::new(err).color(Color32::from_rgb(220, 80, 80)));
             }
-            let replace_label = if self.panels.replace { "Replace \u{25B2}" } else { "Replace \u{25BC}" };
+            let replace_label = if self.panels.replace { "Replace ^" } else { "Replace v" };
             if ui.button(replace_label).clicked() {
                 self.panels.replace = !self.panels.replace;
             }
@@ -1615,6 +1644,10 @@ impl HexenlyApp {
         ui.horizontal(|ui| {
             ui.label("Go to offset:");
             let re = ui.text_edit_singleline(&mut self.goto.input);
+            if self.goto.focus {
+                re.request_focus();
+                self.goto.focus = false;
+            }
             if re.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                 self.goto_offset();
             }
@@ -1645,6 +1678,19 @@ impl HexenlyApp {
                 };
                 ui.label(RichText::new(&display_name).strong());
                 ui.label(RichText::new(format_size(self.data_len())).weak());
+                ui.separator();
+                if ui.add_enabled(!self.nav_back.is_empty(), egui::Button::new("<").frame(false))
+                    .on_hover_text("Navigate back (Alt+Left)")
+                    .clicked()
+                {
+                    self.nav_back();
+                }
+                if ui.add_enabled(!self.nav_forward.is_empty(), egui::Button::new(">").frame(false))
+                    .on_hover_text("Navigate forward (Alt+Right)")
+                    .clicked()
+                {
+                    self.nav_forward();
+                }
 
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                     if let Some(buf) = &self.edit_buffer {
@@ -1652,11 +1698,16 @@ impl HexenlyApp {
                             EditMode::Overwrite => "OVR",
                             EditMode::Insert => "INS",
                         };
+                        let mode_hover = match buf.mode() {
+                            EditMode::Overwrite => "Overwrite mode -- replaces bytes in place (press Insert to toggle)",
+                            EditMode::Insert => "Insert mode -- inserts new bytes, shifting data right (press Insert to toggle)",
+                        };
                         if ui
                             .add(
                                 egui::Button::new(RichText::new(mode_text).monospace())
                                     .frame(false),
                             )
+                            .on_hover_text(mode_hover)
                             .clicked()
                         {
                             toggle_mode = true;
@@ -1683,7 +1734,7 @@ impl HexenlyApp {
                     ui.label(RichText::new("Offset:").weak());
                 });
             } else {
-                ui.label("No file open \u{2014} Ctrl+O to open");
+                ui.label("No file open -- Ctrl+O to open");
             }
         });
         if toggle_mode
@@ -1771,7 +1822,9 @@ impl App for HexenlyApp {
                     let action = structure::show(ui, &layers_clone, cursor);
                     match action {
                         Some(StructureAction::GoToOffset(off)) => {
+                            self.push_nav_history();
                             self.cursor_offset = off;
+                            self.sync_template_offset();
                             self.scroll_to_cursor();
                         }
                         Some(StructureAction::Close) => {
@@ -1787,6 +1840,31 @@ impl App for HexenlyApp {
             SidePanel::left("templates")
                 .default_width(200.0)
                 .show(ctx, |ui| {
+                    // Active layers section — always at the top
+                    ui.horizontal(|ui| {
+                        ui.heading("Active Layers");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button("x").clicked() {
+                                self.panels.template_browser = false;
+                            }
+                        });
+                    });
+                    let layers_clone = self.template_layers.clone();
+                    if let Some(action) = layers::show(ui, &layers_clone) {
+                        match action {
+                            LayerAction::Remove(i) => {
+                                self.remove_template_layer(i);
+                            }
+                            LayerAction::GoToOffset(off) => {
+                                self.push_nav_history();
+                                self.cursor_offset = off as usize;
+                                self.sync_template_offset();
+                            }
+                        }
+                    }
+                    ui.separator();
+
+                    // Template catalog below
                     let active_indices: Vec<usize> = self.template_layers.iter().map(|l| l.registry_index).collect();
                     let action = templates::show(
                         ui,
@@ -1803,27 +1881,7 @@ impl App for HexenlyApp {
                         Some(TemplateBrowserAction::Deselect) => {
                             self.template_layers.clear();
                         }
-                        Some(TemplateBrowserAction::Close) => {
-                            self.panels.template_browser = false;
-                        }
                         None => {}
-                    }
-
-                    // Active layers section
-                    if !self.template_layers.is_empty() {
-                        ui.separator();
-                        ui.label(RichText::new("Active Layers").strong());
-                        let layers_clone = self.template_layers.clone();
-                        if let Some(action) = layers::show(ui, &layers_clone) {
-                            match action {
-                                LayerAction::Remove(i) => {
-                                    self.remove_template_layer(i);
-                                }
-                                LayerAction::GoToOffset(off) => {
-                                    self.cursor_offset = off as usize;
-                                }
-                            }
-                        }
                     }
                 });
         }
@@ -1853,6 +1911,7 @@ impl App for HexenlyApp {
                             }
                         }
                         Some(BookmarkAction::GoToOffset(off)) => {
+                            self.push_nav_history();
                             self.set_cursor_abs(off);
                         }
                         Some(BookmarkAction::Delete(idx)) => {
@@ -1941,6 +2000,7 @@ impl App for HexenlyApp {
                         self.selection_anchor = None;
                         self.edit_focus = pane;
                         self.nibble_high = true;
+                        self.sync_template_offset();
                     }
                     Some(HexViewAction::Select { start, end, pane }) => {
                         let max = data_len.saturating_sub(1);
@@ -1951,6 +2011,7 @@ impl App for HexenlyApp {
                         self.selection_pane = pane;
                         self.edit_focus = pane;
                         self.nibble_high = true;
+                        self.sync_template_offset();
                     }
                     Some(HexViewAction::ApplyTemplateAt(offset)) => {
                         self.template_apply_offset = format!("0x{:X}", offset);
