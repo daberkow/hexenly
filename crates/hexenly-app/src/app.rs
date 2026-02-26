@@ -40,6 +40,8 @@ pub struct TemplateLayer {
 pub enum TextEncoding {
     Ascii,
     Utf8,
+    Utf16Le,
+    Utf16Be,
 }
 
 #[derive(Debug, Clone)]
@@ -1204,10 +1206,35 @@ impl HexenlyApp {
     }
 
     fn handle_ascii_input(&mut self, ch: char) {
-        if !ch.is_ascii() || ch.is_ascii_control() {
+        if ch.is_control() {
             return;
         }
         let Some(buf) = &mut self.edit_buffer else { return };
+
+        // Encode the character according to the current text encoding
+        let bytes: Vec<u8> = match self.text_encoding {
+            TextEncoding::Ascii => {
+                if !ch.is_ascii() {
+                    return;
+                }
+                vec![ch as u8]
+            }
+            TextEncoding::Utf8 => {
+                let mut b = [0u8; 4];
+                let s = ch.encode_utf8(&mut b);
+                s.as_bytes().to_vec()
+            }
+            TextEncoding::Utf16Le => {
+                let mut buf16 = [0u16; 2];
+                let encoded = ch.encode_utf16(&mut buf16);
+                encoded.iter().flat_map(|u| u.to_le_bytes()).collect()
+            }
+            TextEncoding::Utf16Be => {
+                let mut buf16 = [0u16; 2];
+                let encoded = ch.encode_utf16(&mut buf16);
+                encoded.iter().flat_map(|u| u.to_be_bytes()).collect()
+            }
+        };
 
         // If selection exists, delete it first (insert mode) or start from selection start
         if let Some(sel) = self.selection.take() {
@@ -1221,16 +1248,21 @@ impl HexenlyApp {
         let offset = self.cursor_offset;
 
         if buf.mode() == EditMode::Insert {
-            buf.insert_byte(offset, ch as u8);
+            for (i, &b) in bytes.iter().enumerate() {
+                buf.insert_byte(offset + i, b);
+            }
         } else {
-            buf.overwrite_byte(offset, ch as u8);
+            for (i, &b) in bytes.iter().enumerate() {
+                if offset + i < buf.len() {
+                    buf.overwrite_byte(offset + i, b);
+                }
+            }
         }
 
-        // Advance cursor
+        // Advance cursor by the number of bytes written
+        let advance = bytes.len();
         let max = buf.len().saturating_sub(1);
-        if self.cursor_offset < max {
-            self.cursor_offset += 1;
-        }
+        self.cursor_offset = (self.cursor_offset + advance).min(max);
         self.nibble_high = true;
     }
 
@@ -1305,6 +1337,22 @@ impl HexenlyApp {
             }
             TextEncoding::Utf8 => {
                 String::from_utf8_lossy(selected).into_owned()
+            }
+            TextEncoding::Utf16Le => {
+                let u16s: Vec<u16> = selected
+                    .chunks(2)
+                    .filter(|c| c.len() == 2)
+                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                    .collect();
+                String::from_utf16_lossy(&u16s)
+            }
+            TextEncoding::Utf16Be => {
+                let u16s: Vec<u16> = selected
+                    .chunks(2)
+                    .filter(|c| c.len() == 2)
+                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                    .collect();
+                String::from_utf16_lossy(&u16s)
             }
         };
         ctx.copy_text(text);
@@ -1481,6 +1529,20 @@ impl HexenlyApp {
                         .clicked()
                     {
                         self.text_encoding = TextEncoding::Utf8;
+                        ui.close();
+                    }
+                    if ui
+                        .selectable_label(self.text_encoding == TextEncoding::Utf16Le, "UTF-16 LE")
+                        .clicked()
+                    {
+                        self.text_encoding = TextEncoding::Utf16Le;
+                        ui.close();
+                    }
+                    if ui
+                        .selectable_label(self.text_encoding == TextEncoding::Utf16Be, "UTF-16 BE")
+                        .clicked()
+                    {
+                        self.text_encoding = TextEncoding::Utf16Be;
                         ui.close();
                     }
                 });
@@ -1937,6 +1999,7 @@ impl App for HexenlyApp {
         if self.panels.inspector {
             SidePanel::right("inspector")
                 .default_width(260.0)
+                .min_width(200.0)
                 .show(ctx, |ui| {
                     let close = if let Some(data) = self.data_bytes() {
                         inspector::show(ui, data, self.cursor_offset, &self.hex_colors)
@@ -1992,6 +2055,7 @@ impl App for HexenlyApp {
                     self.nibble_high,
                     self.edit_focus,
                     &self.hex_colors,
+                    self.text_encoding,
                 );
                 match action {
                     Some(HexViewAction::SetCursor(off, pane)) if off < data_len => {

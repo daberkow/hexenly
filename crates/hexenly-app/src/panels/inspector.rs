@@ -18,7 +18,7 @@ pub fn show(ui: &mut Ui, data: &[u8], cursor: usize, colors: &HexColors) -> bool
     });
     ui.separator();
 
-    ScrollArea::vertical()
+    ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
     let Some(interp) = ByteInterpreter::interpret(data, cursor) else {
