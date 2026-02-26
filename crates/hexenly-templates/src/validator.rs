@@ -445,6 +445,8 @@ mod tests {
             enum_values: None,
             bit_flags: None,
             color: None,
+            expression: None,
+            apply_template: None,
         }
     }
 

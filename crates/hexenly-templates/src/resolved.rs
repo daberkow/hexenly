@@ -83,4 +83,17 @@ pub struct ResolvedField {
     pub display_value: String,
     /// Optional per-field color — overrides region color in hex view.
     pub color: Option<TemplateColor>,
+    /// For computed fields: the evaluated numeric result.
+    pub computed_value: Option<u64>,
+}
+
+/// A request to auto-apply a template at a computed offset.
+#[derive(Debug, Clone)]
+pub struct TemplateLink {
+    /// Name of the template to apply (matched against registry).
+    pub template_name: String,
+    /// Absolute byte offset where the template should be applied.
+    pub offset: u64,
+    /// ID of the computed field that produced this link.
+    pub source_field_id: String,
 }

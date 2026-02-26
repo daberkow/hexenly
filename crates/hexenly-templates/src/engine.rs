@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use crate::resolved::{ResolvedField, ResolvedRegion, ResolvedTemplate, TemplateColor};
+use crate::resolved::{ResolvedField, ResolvedRegion, ResolvedTemplate, TemplateColor, TemplateLink};
 use crate::schema::{
     ArithExpr, ArithOp, CompareOp, ConditionExpr, FieldType, LengthExpr, OffsetExpr, Operand,
     RepeatMode, Template,
@@ -17,6 +17,7 @@ use crate::schema::{
 pub struct ResolveResult {
     pub template: ResolvedTemplate,
     pub warnings: Vec<ResolveWarning>,
+    pub template_links: Vec<TemplateLink>,
 }
 
 /// A non-fatal issue encountered during resolution (e.g., out-of-bounds offset).
@@ -181,6 +182,7 @@ const REPEAT_SAFETY_CAP: usize = 10_000;
 pub fn resolve(template: &Template, file_bytes: &[u8]) -> ResolveResult {
     let file_len = file_bytes.len() as u64;
     let mut warnings = Vec::new();
+    let mut template_links = Vec::new();
     let mut regions = Vec::new();
     let mut field_map: HashMap<String, ResolvedFieldInfo> = HashMap::new();
 
@@ -484,6 +486,7 @@ pub fn resolve(template: &Template, file_bytes: &[u8]) -> ResolveResult {
                     raw_bytes,
                     display_value,
                     color: field.color.as_deref().and_then(TemplateColor::from_hex),
+                    computed_value: None,
                 });
 
                 // Register in field_map — suffixed ID and base ID (base always points to latest)
@@ -629,6 +632,7 @@ pub fn resolve(template: &Template, file_bytes: &[u8]) -> ResolveResult {
             regions,
         },
         warnings,
+        template_links,
     }
 }
 
@@ -696,6 +700,7 @@ fn format_field_value(field_type: &FieldType, raw: &[u8]) -> String {
             Some(s)
         }
         FieldType::Utf8 | FieldType::Ascii => Some(String::from_utf8_lossy(raw).to_string()),
+        FieldType::Computed => Some("(computed)".to_string()),
     };
     result.unwrap_or_else(|| format!("{} bytes", raw.len()))
 }
@@ -739,6 +744,8 @@ mod tests {
             enum_values: None,
             bit_flags: None,
             color: None,
+            expression: None,
+            apply_template: None,
         }
     }
 

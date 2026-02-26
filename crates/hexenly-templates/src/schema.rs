@@ -131,6 +131,12 @@ pub struct Field {
     /// Optional color as #RRGGBB hex string — overrides region color in hex view
     #[serde(default)]
     pub color: Option<String>,
+    /// Arithmetic expression for computed fields (e.g. "expr:field_a * 512")
+    #[serde(default)]
+    pub expression: Option<String>,
+    /// Template name to auto-apply at the computed value offset
+    #[serde(default)]
+    pub apply_template: Option<String>,
 }
 
 /// Offset expression: integer for absolute, "after:id" for AfterField, "from:id" for FromField,
@@ -211,7 +217,7 @@ pub enum Endianness {
 }
 
 /// Primitive data type of a field, used for both byte decoding and display formatting.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
     U8,
@@ -235,6 +241,7 @@ pub enum FieldType {
     Bytes,
     Utf8,
     Ascii,
+    Computed,
 }
 
 impl FieldType {
@@ -247,7 +254,7 @@ impl FieldType {
             | FieldType::F32Le | FieldType::F32Be => Some(4),
             FieldType::U64Le | FieldType::U64Be | FieldType::I64Le | FieldType::I64Be
             | FieldType::F64Le | FieldType::F64Be => Some(8),
-            FieldType::Bytes | FieldType::Utf8 | FieldType::Ascii => None,
+            FieldType::Bytes | FieldType::Utf8 | FieldType::Ascii | FieldType::Computed => None,
         }
     }
 }
@@ -307,6 +314,11 @@ fn parse_arith_expr(s: &str) -> Result<ArithExpr, String> {
         }
     }
     Err(format!("no space-delimited operator found in expression: '{s}'"))
+}
+
+/// Public entry point for parsing arithmetic expressions.
+pub fn parse_arith_expr_public(s: &str) -> Result<ArithExpr, String> {
+    parse_arith_expr(s)
 }
 
 /// Custom deserialize for ConditionExpr from strings like `"color_type == 3"` or `"version >= 0x02"`.
