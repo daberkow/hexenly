@@ -95,6 +95,15 @@ length = 4
 role = "size"
 description = "Total number of sectors in partition"
 
+[[regions.fields]]
+id = "p1_byte_offset"
+label = "Partition 1 Byte Offset"
+field_type = "computed"
+length = 0
+expression = "expr:p1_lba_first * 512"
+role = "offset"
+description = "Byte offset where partition 1 begins"
+
 [[regions]]
 id = "partition_2"
 label = "Partition Entry 2"
@@ -169,6 +178,15 @@ field_type = "u32_le"
 length = 4
 role = "size"
 description = "Total number of sectors in partition"
+
+[[regions.fields]]
+id = "p2_byte_offset"
+label = "Partition 2 Byte Offset"
+field_type = "computed"
+length = 0
+expression = "expr:p2_lba_first * 512"
+role = "offset"
+description = "Byte offset where partition 2 begins"
 
 [[regions]]
 id = "partition_3"
@@ -245,6 +263,15 @@ length = 4
 role = "size"
 description = "Total number of sectors in partition"
 
+[[regions.fields]]
+id = "p3_byte_offset"
+label = "Partition 3 Byte Offset"
+field_type = "computed"
+length = 0
+expression = "expr:p3_lba_first * 512"
+role = "offset"
+description = "Byte offset where partition 3 begins"
+
 [[regions]]
 id = "partition_4"
 label = "Partition Entry 4"
@@ -319,6 +346,15 @@ field_type = "u32_le"
 length = 4
 role = "size"
 description = "Total number of sectors in partition"
+
+[[regions.fields]]
+id = "p4_byte_offset"
+label = "Partition 4 Byte Offset"
+field_type = "computed"
+length = 0
+expression = "expr:p4_lba_first * 512"
+role = "offset"
+description = "Byte offset where partition 4 begins"
 
 [[regions]]
 id = "boot_signature"
