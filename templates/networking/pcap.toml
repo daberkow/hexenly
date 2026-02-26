@@ -1,0 +1,121 @@
+name = "PCAP"
+description = "PCAP network packet capture (libpcap)"
+extensions = ["pcap", "cap"]
+magic = "D4C3B2A1"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "global_header"
+label = "Global Header"
+color = "#E74C3C"
+offset = 0
+length = 24
+group = "header"
+description = "PCAP global header with file format info and capture parameters"
+
+[[regions.fields]]
+id = "magic_number"
+label = "Magic Number"
+field_type = "u32_le"
+length = 4
+role = "magic"
+description = "0xA1B2C3D4 — PCAP magic number (little-endian)"
+
+[[regions.fields]]
+id = "version_major"
+label = "Major Version"
+field_type = "u16_le"
+length = 2
+role = "version"
+description = "Major version (typically 2)"
+
+[[regions.fields]]
+id = "version_minor"
+label = "Minor Version"
+field_type = "u16_le"
+length = 2
+role = "version"
+description = "Minor version (typically 4)"
+
+[[regions.fields]]
+id = "thiszone"
+label = "Timezone Correction"
+field_type = "i32_le"
+length = 4
+description = "GMT to local timezone correction (usually 0)"
+
+[[regions.fields]]
+id = "sigfigs"
+label = "Timestamp Accuracy"
+field_type = "u32_le"
+length = 4
+description = "Timestamp accuracy (usually 0)"
+
+[[regions.fields]]
+id = "snaplen"
+label = "Snap Length"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Maximum capture length per packet (typically 65535)"
+
+[[regions.fields]]
+id = "link_type"
+label = "Link-Layer Type"
+field_type = "u32_le"
+length = 4
+description = "Link-layer header type"
+
+[regions.fields.enum_values]
+"0" = "NULL/Loopback"
+"1" = "Ethernet"
+"6" = "Token Ring"
+"9" = "PPP"
+"12" = "Raw IP (BSD)"
+"101" = "Raw IP"
+"105" = "IEEE 802.11 (WiFi)"
+"113" = "Linux cooked capture (SLL)"
+"127" = "IEEE 802.11 with radiotap"
+"162" = "Raw OS IPv4"
+"228" = "Raw IPv4"
+"229" = "Raw IPv6"
+
+[[regions]]
+id = "first_packet_header"
+label = "First Packet Header"
+color = "#3498DB"
+offset = 24
+length = 16
+group = "packet"
+description = "Header for the first captured packet"
+
+[[regions.fields]]
+id = "ts_sec"
+label = "Timestamp Seconds"
+field_type = "u32_le"
+length = 4
+description = "Timestamp seconds (Unix epoch)"
+
+[[regions.fields]]
+id = "ts_usec"
+label = "Timestamp Microseconds"
+field_type = "u32_le"
+length = 4
+description = "Timestamp microseconds"
+
+[[regions.fields]]
+id = "incl_len"
+label = "Included Length"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Number of bytes captured (included in file)"
+
+[[regions.fields]]
+id = "orig_len"
+label = "Original Length"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Actual packet length on the wire"

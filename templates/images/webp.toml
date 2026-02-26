@@ -1,0 +1,101 @@
+name = "WebP"
+description = "WebP image format (RIFF-based)"
+extensions = ["webp"]
+magic = "52494646"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "riff_header"
+label = "RIFF Header"
+color = "#E74C3C"
+offset = 0
+length = 12
+group = "header"
+description = "RIFF container header with file size and WebP signature"
+
+[[regions.fields]]
+id = "riff_magic"
+label = "RIFF Magic"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "RIFF"
+
+[[regions.fields]]
+id = "file_size"
+label = "File Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "File size minus 8 bytes"
+
+[[regions.fields]]
+id = "webp_magic"
+label = "WebP Magic"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "WEBP"
+
+[[regions]]
+id = "chunk_header"
+label = "First Chunk Header"
+color = "#3498DB"
+offset = 12
+length = 8
+group = "chunk"
+description = "First chunk header with FourCC and data size"
+
+[[regions.fields]]
+id = "chunk_fourcc"
+label = "Chunk FourCC"
+field_type = "ascii"
+length = 4
+description = "Chunk type: VP8 (lossy), VP8L (lossless), or VP8X (extended)"
+
+[[regions.fields]]
+id = "chunk_size"
+label = "Chunk Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Chunk data size in bytes"
+
+[[regions]]
+id = "vp8_frame_header"
+label = "VP8 Frame Header"
+color = "#2ECC71"
+offset = 20
+length = 10
+group = "data"
+description = "VP8 bitstream frame header with dimensions"
+
+[[regions.fields]]
+id = "frame_tag"
+label = "Frame Tag"
+field_type = "bytes"
+length = 3
+description = "Frame tag (keyframe flag, version, show_frame, partition_length)"
+
+[[regions.fields]]
+id = "vp8_signature"
+label = "VP8 Signature"
+field_type = "bytes"
+length = 3
+role = "magic"
+description = "VP8 signature: 0x9D 0x01 0x2A"
+
+[[regions.fields]]
+id = "width"
+label = "Width"
+field_type = "u16_le"
+length = 2
+description = "Frame width in pixels (lower 14 bits)"
+
+[[regions.fields]]
+id = "height"
+label = "Height"
+field_type = "u16_le"
+length = 2
+description = "Frame height in pixels (lower 14 bits)"

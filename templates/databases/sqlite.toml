@@ -1,0 +1,209 @@
+name = "SQLite"
+description = "SQLite database file format (100-byte header)"
+extensions = ["sqlite", "db", "sqlite3"]
+magic = "53514C69746520666F726D6174203300"
+magic_offset = 0
+endian = "big"
+
+[[regions]]
+id = "header"
+label = "SQLite Header"
+color = "#E74C3C"
+offset = 0
+length = 100
+group = "header"
+description = "100-byte database header"
+
+[[regions.fields]]
+id = "header_string"
+label = "Header String"
+field_type = "ascii"
+length = 16
+role = "magic"
+description = "SQLite format 3\\0"
+
+[[regions.fields]]
+id = "page_size"
+label = "Page Size"
+field_type = "u16_be"
+length = 2
+role = "size"
+description = "Database page size in bytes (512-65536, or 1 for 65536)"
+
+[[regions.fields]]
+id = "write_version"
+label = "Write Version"
+field_type = "u8"
+length = 1
+role = "version"
+description = "File format write version (1=legacy, 2=WAL)"
+
+[regions.fields.enum_values]
+"1" = "Legacy"
+"2" = "WAL"
+
+[[regions.fields]]
+id = "read_version"
+label = "Read Version"
+field_type = "u8"
+length = 1
+role = "version"
+description = "File format read version (1=legacy, 2=WAL)"
+
+[regions.fields.enum_values]
+"1" = "Legacy"
+"2" = "WAL"
+
+[[regions.fields]]
+id = "reserved_space"
+label = "Reserved Space"
+field_type = "u8"
+length = 1
+role = "reserved"
+description = "Reserved bytes at end of each page"
+
+[[regions.fields]]
+id = "max_embedded_payload"
+label = "Max Embedded Payload"
+field_type = "u8"
+length = 1
+description = "Maximum embedded payload fraction (must be 64)"
+
+[[regions.fields]]
+id = "min_embedded_payload"
+label = "Min Embedded Payload"
+field_type = "u8"
+length = 1
+description = "Minimum embedded payload fraction (must be 32)"
+
+[[regions.fields]]
+id = "leaf_payload"
+label = "Leaf Payload"
+field_type = "u8"
+length = 1
+description = "Leaf payload fraction (must be 32)"
+
+[[regions.fields]]
+id = "file_change_counter"
+label = "File Change Counter"
+field_type = "u32_be"
+length = 4
+description = "Incremented on each transaction commit"
+
+[[regions.fields]]
+id = "database_size"
+label = "Database Size"
+field_type = "u32_be"
+length = 4
+role = "size"
+description = "Database size in pages"
+
+[[regions.fields]]
+id = "first_freelist_page"
+label = "First Freelist Page"
+field_type = "u32_be"
+length = 4
+role = "offset"
+description = "Page number of first freelist trunk page (0 if none)"
+
+[[regions.fields]]
+id = "total_freelist_pages"
+label = "Total Freelist Pages"
+field_type = "u32_be"
+length = 4
+role = "count"
+description = "Total number of freelist pages"
+
+[[regions.fields]]
+id = "schema_cookie"
+label = "Schema Cookie"
+field_type = "u32_be"
+length = 4
+description = "Schema cookie (incremented on schema change)"
+
+[[regions.fields]]
+id = "schema_format"
+label = "Schema Format"
+field_type = "u32_be"
+length = 4
+role = "version"
+description = "Schema format number (1, 2, 3, or 4)"
+
+[regions.fields.enum_values]
+"1" = "Format 1"
+"2" = "Format 2"
+"3" = "Format 3"
+"4" = "Format 4"
+
+[[regions.fields]]
+id = "default_cache_size"
+label = "Default Cache Size"
+field_type = "u32_be"
+length = 4
+description = "Suggested cache size in pages"
+
+[[regions.fields]]
+id = "largest_root_btree"
+label = "Largest Root B-Tree"
+field_type = "u32_be"
+length = 4
+role = "offset"
+description = "Page number of largest root b-tree page (auto-vacuum/incremental-vacuum modes)"
+
+[[regions.fields]]
+id = "text_encoding"
+label = "Text Encoding"
+field_type = "u32_be"
+length = 4
+description = "Database text encoding"
+
+[regions.fields.enum_values]
+"1" = "UTF-8"
+"2" = "UTF-16le"
+"3" = "UTF-16be"
+
+[[regions.fields]]
+id = "user_version"
+label = "User Version"
+field_type = "u32_be"
+length = 4
+role = "version"
+description = "User version (set by user_version pragma)"
+
+[[regions.fields]]
+id = "incremental_vacuum"
+label = "Incremental Vacuum"
+field_type = "u32_be"
+length = 4
+description = "Non-zero for incremental-vacuum mode"
+
+[[regions.fields]]
+id = "application_id"
+label = "Application ID"
+field_type = "u32_be"
+length = 4
+description = "Application ID (set by PRAGMA application_id)"
+
+[[regions.fields]]
+id = "reserved_expansion"
+label = "Reserved for Expansion"
+field_type = "bytes"
+length = 20
+role = "reserved"
+description = "Reserved for expansion (must be zero)"
+
+[[regions.fields]]
+id = "version_valid_for"
+label = "Version Valid For"
+field_type = "u32_be"
+length = 4
+role = "version"
+description = "Version-valid-for number"
+
+[[regions.fields]]
+id = "sqlite_version"
+label = "SQLite Version"
+field_type = "u32_be"
+length = 4
+role = "version"
+description = "SQLite version number that wrote the database"

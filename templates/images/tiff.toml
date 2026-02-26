@@ -1,0 +1,124 @@
+name = "TIFF"
+description = "Tagged Image File Format"
+extensions = ["tiff", "tif"]
+magic = "49492A00"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "header"
+label = "TIFF Header"
+color = "#E74C3C"
+offset = 0
+length = 8
+group = "header"
+description = "TIFF file header with byte order and IFD pointer"
+
+[[regions.fields]]
+id = "byte_order"
+label = "Byte Order"
+field_type = "ascii"
+length = 2
+role = "magic"
+description = "Byte order: II (little-endian) or MM (big-endian)"
+
+[[regions.fields]]
+id = "magic_number"
+label = "Magic Number"
+field_type = "u16_le"
+length = 2
+role = "magic"
+description = "Magic number 42 (0x002A)"
+
+[[regions.fields]]
+id = "ifd_offset"
+label = "IFD Offset"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Offset to first Image File Directory (IFD)"
+
+[[regions]]
+id = "ifd_count"
+label = "IFD Entry Count"
+color = "#3498DB"
+offset = 8
+length = 2
+group = "ifd"
+description = "Number of entries in the first IFD"
+
+[[regions.fields]]
+id = "ifd_count"
+label = "Entry Count"
+field_type = "u16_le"
+length = 2
+role = "count"
+description = "Number of directory entries in this IFD"
+
+[[regions]]
+id = "ifd_entry_0"
+label = "First IFD Entry"
+color = "#2ECC71"
+offset = 10
+length = 12
+group = "ifd"
+description = "First directory entry in the IFD"
+
+[[regions.fields]]
+id = "tag"
+label = "Tag"
+field_type = "u16_le"
+length = 2
+description = "TIFF tag identifier"
+
+[regions.fields.enum_values]
+"256" = "ImageWidth"
+"257" = "ImageLength"
+"258" = "BitsPerSample"
+"259" = "Compression"
+"262" = "PhotometricInterpretation"
+"273" = "StripOffsets"
+"274" = "Orientation"
+"277" = "SamplesPerPixel"
+"278" = "RowsPerStrip"
+"279" = "StripByteCounts"
+"282" = "XResolution"
+"283" = "YResolution"
+"296" = "ResolutionUnit"
+
+[[regions.fields]]
+id = "field_type_tag"
+label = "Field Type"
+field_type = "u16_le"
+length = 2
+description = "Data type of the tag value"
+
+[regions.fields.enum_values]
+"1" = "BYTE"
+"2" = "ASCII"
+"3" = "SHORT"
+"4" = "LONG"
+"5" = "RATIONAL"
+"6" = "SBYTE"
+"7" = "UNDEFINED"
+"8" = "SSHORT"
+"9" = "SLONG"
+"10" = "SRATIONAL"
+"11" = "FLOAT"
+"12" = "DOUBLE"
+
+[[regions.fields]]
+id = "value_count"
+label = "Value Count"
+field_type = "u32_le"
+length = 4
+role = "count"
+description = "Number of values"
+
+[[regions.fields]]
+id = "value_offset"
+label = "Value/Offset"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Value or offset to value (if > 4 bytes)"

@@ -1,0 +1,71 @@
+name = "7z"
+description = "7-Zip archive format"
+extensions = ["7z"]
+magic = "377ABCAF271C"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "signature_header"
+label = "Signature Header"
+color = "#E74C3C"
+offset = 0
+length = 32
+group = "header"
+description = "7z signature header containing version and next header location"
+
+[[regions.fields]]
+id = "signature"
+label = "Signature"
+field_type = "bytes"
+length = 6
+role = "magic"
+description = "37 7A BC AF 27 1C — 7z signature"
+
+[[regions.fields]]
+id = "major_version"
+label = "Major Version"
+field_type = "u8"
+length = 1
+role = "version"
+description = "Archive format major version"
+
+[[regions.fields]]
+id = "minor_version"
+label = "Minor Version"
+field_type = "u8"
+length = 1
+role = "version"
+description = "Archive format minor version"
+
+[[regions.fields]]
+id = "start_header_crc"
+label = "Start Header CRC"
+field_type = "u32_le"
+length = 4
+role = "checksum"
+description = "CRC-32 of the start header"
+
+[[regions.fields]]
+id = "next_header_offset"
+label = "Next Header Offset"
+field_type = "u64_le"
+length = 8
+role = "offset"
+description = "Offset of the next header (relative to end of signature header)"
+
+[[regions.fields]]
+id = "next_header_size"
+label = "Next Header Size"
+field_type = "u64_le"
+length = 8
+role = "size"
+description = "Size of the next header"
+
+[[regions.fields]]
+id = "next_header_crc"
+label = "Next Header CRC"
+field_type = "u32_le"
+length = 4
+role = "checksum"
+description = "CRC-32 of the next header"

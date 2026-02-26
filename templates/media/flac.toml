@@ -1,0 +1,103 @@
+name = "FLAC"
+description = "Free Lossless Audio Codec"
+extensions = ["flac"]
+magic = "664C6143"
+magic_offset = 0
+endian = "big"
+
+[[regions]]
+id = "stream_marker"
+label = "Stream Marker"
+color = "#E74C3C"
+offset = 0
+length = 4
+group = "header"
+description = "FLAC stream marker identifying the file as FLAC"
+
+[[regions.fields]]
+id = "magic"
+label = "Magic"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "fLaC"
+
+[[regions]]
+id = "streaminfo_block_header"
+label = "STREAMINFO Block Header"
+color = "#E67E22"
+offset = 4
+length = 4
+group = "header"
+description = "Metadata block header for the mandatory STREAMINFO block"
+
+[[regions.fields]]
+id = "block_type"
+label = "Block Type"
+field_type = "u8"
+length = 1
+description = "Block type (bit 7 = last block flag, bits 0-6 = type, 0=STREAMINFO)"
+
+[[regions.fields]]
+id = "block_length"
+label = "Block Length"
+field_type = "bytes"
+length = 3
+role = "size"
+description = "Length of metadata block data (24-bit big-endian, always 34 for STREAMINFO)"
+
+[[regions]]
+id = "streaminfo_data"
+label = "STREAMINFO Data"
+color = "#3498DB"
+offset = 8
+length = 34
+group = "header"
+description = "STREAMINFO metadata containing stream parameters and MD5 signature"
+
+[[regions.fields]]
+id = "min_block_size"
+label = "Min Block Size"
+field_type = "u16_be"
+length = 2
+role = "size"
+description = "Minimum block size in samples"
+
+[[regions.fields]]
+id = "max_block_size"
+label = "Max Block Size"
+field_type = "u16_be"
+length = 2
+role = "size"
+description = "Maximum block size in samples"
+
+[[regions.fields]]
+id = "min_frame_size"
+label = "Min Frame Size"
+field_type = "bytes"
+length = 3
+role = "size"
+description = "Minimum frame size in bytes (0 = unknown)"
+
+[[regions.fields]]
+id = "max_frame_size"
+label = "Max Frame Size"
+field_type = "bytes"
+length = 3
+role = "size"
+description = "Maximum frame size in bytes (0 = unknown)"
+
+[[regions.fields]]
+id = "sample_rate_and_channels"
+label = "Sample Rate / Channels / BPS / Total Samples"
+field_type = "bytes"
+length = 8
+description = "Sample rate (20 bits), channels-1 (3 bits), bps-1 (5 bits), total samples (36 bits)"
+
+[[regions.fields]]
+id = "md5_signature"
+label = "MD5 Signature"
+field_type = "bytes"
+length = 16
+role = "checksum"
+description = "MD5 signature of unencoded audio data"

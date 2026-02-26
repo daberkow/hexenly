@@ -1,0 +1,82 @@
+name = "XZ"
+description = "XZ compressed data (LZMA2)"
+extensions = ["xz"]
+magic = "FD377A585A00"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "stream_header"
+label = "Stream Header"
+color = "#E74C3C"
+offset = 0
+length = 12
+group = "header"
+description = "XZ stream header with magic bytes, stream flags, and CRC"
+
+[[regions.fields]]
+id = "magic"
+label = "Magic"
+field_type = "bytes"
+length = 6
+role = "magic"
+description = "FD 37 7A 58 5A 00 — XZ magic bytes"
+
+[[regions.fields]]
+id = "stream_flags_reserved"
+label = "Stream Flags Reserved"
+field_type = "u8"
+length = 1
+role = "reserved"
+description = "Must be 0x00"
+
+[[regions.fields]]
+id = "check_type"
+label = "Check Type"
+field_type = "u8"
+length = 1
+description = "Integrity check type"
+
+[regions.fields.enum_values]
+"0" = "None"
+"1" = "CRC-32"
+"4" = "CRC-64"
+"10" = "SHA-256"
+
+[[regions.fields]]
+id = "header_crc"
+label = "Header CRC"
+field_type = "u32_le"
+length = 4
+role = "checksum"
+description = "CRC-32 of stream flags bytes"
+
+[[regions]]
+id = "first_block_header"
+label = "First Block Header Start"
+color = "#3498DB"
+offset = 12
+length = 2
+group = "block"
+description = "Beginning of the first block header"
+
+[[regions.fields]]
+id = "block_header_size"
+label = "Block Header Size"
+field_type = "u8"
+length = 1
+role = "size"
+description = "Block header size as (value + 1) * 4 bytes (0x00 = index indicator)"
+
+[[regions.fields]]
+id = "block_flags"
+label = "Block Flags"
+field_type = "u8"
+length = 1
+description = "Block flags"
+
+[regions.fields.bit_flags]
+"0" = "Filter Count Bit 0"
+"1" = "Filter Count Bit 1"
+"4" = "Compressed Size Present"
+"5" = "Uncompressed Size Present"

@@ -1,0 +1,70 @@
+name = "WebAssembly"
+description = "WebAssembly binary module format"
+extensions = ["wasm"]
+magic = "0061736D"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "module_header"
+label = "Module Header"
+color = "#E74C3C"
+offset = 0
+length = 8
+group = "header"
+description = "WebAssembly module header with magic number and version"
+
+[[regions.fields]]
+id = "magic"
+label = "Magic"
+field_type = "bytes"
+length = 4
+role = "magic"
+description = "0x00 0x61 0x73 0x6D (\\0asm)"
+
+[[regions.fields]]
+id = "version"
+label = "Version"
+field_type = "u32_le"
+length = 4
+role = "version"
+description = "Module version (1 for current spec)"
+
+[[regions]]
+id = "first_section"
+label = "First Section Header"
+color = "#3498DB"
+offset = 8
+length = 2
+group = "sections"
+description = "First section identifier and size byte"
+
+[[regions.fields]]
+id = "section_id"
+label = "Section ID"
+field_type = "u8"
+length = 1
+description = "Section identifier"
+
+[regions.fields.enum_values]
+"0" = "Custom"
+"1" = "Type"
+"2" = "Import"
+"3" = "Function"
+"4" = "Table"
+"5" = "Memory"
+"6" = "Global"
+"7" = "Export"
+"8" = "Start"
+"9" = "Element"
+"10" = "Code"
+"11" = "Data"
+"12" = "Data Count"
+
+[[regions.fields]]
+id = "section_size_byte"
+label = "Section Size"
+field_type = "u8"
+length = 1
+role = "size"
+description = "Section size (first byte of LEB128-encoded length)"

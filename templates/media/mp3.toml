@@ -1,0 +1,104 @@
+name = "MP3"
+description = "MPEG Audio Layer III with ID3v2 tag"
+extensions = ["mp3"]
+magic = "494433"
+magic_offset = 0
+endian = "big"
+
+[[regions]]
+id = "id3v2_header"
+label = "ID3v2 Header"
+color = "#E74C3C"
+offset = 0
+length = 10
+group = "header"
+description = "ID3v2 tag header with version, flags, and tag size"
+
+[[regions.fields]]
+id = "id3_magic"
+label = "ID3 Magic"
+field_type = "ascii"
+length = 3
+role = "magic"
+description = "ID3"
+
+[[regions.fields]]
+id = "id3_version_major"
+label = "Version Major"
+field_type = "u8"
+length = 1
+role = "version"
+description = "ID3v2 major version (3=ID3v2.3, 4=ID3v2.4)"
+
+[regions.fields.enum_values]
+"2" = "ID3v2.2"
+"3" = "ID3v2.3"
+"4" = "ID3v2.4"
+
+[[regions.fields]]
+id = "id3_version_minor"
+label = "Version Minor"
+field_type = "u8"
+length = 1
+role = "version"
+description = "ID3v2 revision number"
+
+[[regions.fields]]
+id = "id3_flags"
+label = "Flags"
+field_type = "u8"
+length = 1
+description = "ID3v2 flags"
+
+[regions.fields.bit_flags]
+"7" = "Unsynchronisation"
+"6" = "Extended Header"
+"5" = "Experimental"
+"4" = "Footer Present"
+
+[[regions.fields]]
+id = "id3_size"
+label = "Tag Size"
+field_type = "bytes"
+length = 4
+role = "size"
+description = "Tag size as synchsafe integer (excluding header, 28-bit effective)"
+
+[[regions]]
+id = "first_id3_frame"
+label = "First ID3 Frame Header"
+color = "#3498DB"
+offset = 10
+length = 10
+group = "frames"
+description = "First ID3v2 frame header with frame identifier, size, and flags"
+
+[[regions.fields]]
+id = "frame_id"
+label = "Frame ID"
+field_type = "ascii"
+length = 4
+description = "Frame identifier (e.g. TIT2, TPE1, TALB)"
+
+[[regions.fields]]
+id = "frame_size"
+label = "Frame Size"
+field_type = "u32_be"
+length = 4
+role = "size"
+description = "Frame data size (excluding header)"
+
+[[regions.fields]]
+id = "frame_flags"
+label = "Frame Flags"
+field_type = "u16_be"
+length = 2
+description = "Frame status and encoding flags"
+
+[regions.fields.bit_flags]
+"14" = "Tag Alter Preserve"
+"13" = "File Alter Preserve"
+"12" = "Read Only"
+"6" = "Compression"
+"5" = "Encryption"
+"4" = "Grouping"

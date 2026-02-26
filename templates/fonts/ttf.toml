@@ -1,0 +1,92 @@
+name = "TrueType/OpenType"
+description = "TrueType/OpenType font file"
+extensions = ["ttf", "otf", "ttc"]
+magic = "00010000"
+magic_offset = 0
+endian = "big"
+
+[[regions]]
+id = "offset_table"
+label = "Offset Table"
+color = "#E74C3C"
+offset = 0
+length = 12
+group = "header"
+description = "Font offset table with table directory metadata"
+
+[[regions.fields]]
+id = "sfVersion"
+label = "sfVersion"
+field_type = "u32_be"
+length = 4
+role = "magic"
+description = "0x00010000 (TrueType) or 0x4F54544F (OTTO = OpenType/CFF)"
+
+[[regions.fields]]
+id = "numTables"
+label = "Number of Tables"
+field_type = "u16_be"
+length = 2
+role = "count"
+description = "Number of font tables"
+
+[[regions.fields]]
+id = "searchRange"
+label = "Search Range"
+field_type = "u16_be"
+length = 2
+description = "(Maximum power of 2 <= numTables) * 16"
+
+[[regions.fields]]
+id = "entrySelector"
+label = "Entry Selector"
+field_type = "u16_be"
+length = 2
+description = "Log2 of (maximum power of 2 <= numTables)"
+
+[[regions.fields]]
+id = "rangeShift"
+label = "Range Shift"
+field_type = "u16_be"
+length = 2
+description = "numTables * 16 - searchRange"
+
+[[regions]]
+id = "first_table_record"
+label = "First Table Record"
+color = "#3498DB"
+offset = 12
+length = 16
+group = "tables"
+description = "First entry in the table directory"
+
+[[regions.fields]]
+id = "tag"
+label = "Table Tag"
+field_type = "ascii"
+length = 4
+description = "Table identifier (e.g. cmap, glyf, head, name)"
+
+[[regions.fields]]
+id = "checksum"
+label = "Checksum"
+field_type = "u32_be"
+length = 4
+role = "checksum"
+description = "Table checksum"
+
+[[regions.fields]]
+id = "table_offset"
+label = "Table Offset"
+field_type = "u32_be"
+length = 4
+role = "offset"
+description = "Offset from beginning of font file"
+
+[[regions.fields]]
+id = "table_length"
+label = "Table Length"
+field_type = "u32_be"
+length = 4
+role = "size"
+description = "Length of table in bytes"

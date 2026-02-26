@@ -1,0 +1,111 @@
+name = "ICO"
+description = "Windows Icon file format"
+extensions = ["ico"]
+magic = "00000100"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "icon_header"
+label = "Icon Header"
+color = "#E74C3C"
+offset = 0
+length = 6
+group = "header"
+description = "ICO file header with image type and count"
+
+[[regions.fields]]
+id = "reserved"
+label = "Reserved"
+field_type = "u16_le"
+length = 2
+role = "reserved"
+description = "Must be 0"
+
+[[regions.fields]]
+id = "image_type"
+label = "Image Type"
+field_type = "u16_le"
+length = 2
+role = "magic"
+description = "1 = ICO (icon), 2 = CUR (cursor)"
+
+[regions.fields.enum_values]
+"1" = "Icon (.ico)"
+"2" = "Cursor (.cur)"
+
+[[regions.fields]]
+id = "image_count"
+label = "Image Count"
+field_type = "u16_le"
+length = 2
+role = "count"
+description = "Number of images in the file"
+
+[[regions]]
+id = "entry_0"
+label = "Image Entry 1"
+color = "#3498DB"
+offset = 6
+length = 16
+group = "entry"
+description = "First image directory entry"
+
+[[regions.fields]]
+id = "width"
+label = "Width"
+field_type = "u8"
+length = 1
+description = "Width in pixels (0 means 256)"
+
+[[regions.fields]]
+id = "height"
+label = "Height"
+field_type = "u8"
+length = 1
+description = "Height in pixels (0 means 256)"
+
+[[regions.fields]]
+id = "color_count"
+label = "Color Count"
+field_type = "u8"
+length = 1
+description = "Number of colors in palette (0 if >= 256)"
+
+[[regions.fields]]
+id = "reserved2"
+label = "Reserved"
+field_type = "u8"
+length = 1
+role = "reserved"
+description = "Must be 0"
+
+[[regions.fields]]
+id = "color_planes"
+label = "Color Planes"
+field_type = "u16_le"
+length = 2
+description = "Color planes (should be 0 or 1)"
+
+[[regions.fields]]
+id = "bits_per_pixel"
+label = "Bits Per Pixel"
+field_type = "u16_le"
+length = 2
+description = "Bits per pixel"
+
+[[regions.fields]]
+id = "image_size"
+label = "Image Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of image data in bytes"
+
+[[regions.fields]]
+id = "image_offset"
+label = "Image Offset"
+field_type = "u32_le"
+length = 4
+role = "offset"
+description = "Offset of image data from beginning of file"

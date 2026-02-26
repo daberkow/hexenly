@@ -1,0 +1,61 @@
+name = "PDF"
+description = "Portable Document Format (ISO 32000)"
+extensions = ["pdf"]
+magic = "25504446"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "header"
+label = "PDF Header"
+color = "#E74C3C"
+offset = 0
+length = 9
+group = "header"
+description = "PDF version header line"
+
+[[regions.fields]]
+id = "signature"
+label = "Signature"
+field_type = "ascii"
+length = 5
+role = "magic"
+description = "%PDF-"
+
+[[regions.fields]]
+id = "version"
+label = "Version"
+field_type = "ascii"
+length = 3
+role = "version"
+description = "Version number e.g. 1.7"
+
+[[regions.fields]]
+id = "line_ending"
+label = "Line Ending"
+field_type = "bytes"
+length = 1
+description = "Line feed"
+
+[[regions]]
+id = "binary_comment"
+label = "Binary Comment"
+color = "#E67E22"
+offset = 9
+length = 5
+group = "header"
+description = "Comment line with high-bit bytes indicating binary content"
+
+[[regions.fields]]
+id = "comment_marker"
+label = "Comment Marker"
+field_type = "u8"
+length = 1
+description = "0x25 (%) — comment indicator"
+
+[[regions.fields]]
+id = "binary_hint"
+label = "Binary Hint"
+field_type = "bytes"
+length = 4
+description = "High-bit bytes indicating binary content"

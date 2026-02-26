@@ -1,0 +1,141 @@
+name = "Mach-O"
+description = "Mach-O 64-bit executable (macOS/iOS)"
+extensions = ["o", "dylib", "bundle"]
+magic = "CFFAEDFE"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "mach_header"
+label = "Mach-O Header"
+color = "#E74C3C"
+offset = 0
+length = 32
+group = "header"
+description = "mach_header_64 — Mach-O 64-bit file header"
+
+[[regions.fields]]
+id = "magic"
+label = "Magic"
+field_type = "u32_le"
+length = 4
+role = "magic"
+description = "0xFEEDFACF — Mach-O 64-bit magic"
+
+[[regions.fields]]
+id = "cpu_type"
+label = "CPU Type"
+field_type = "u32_le"
+length = 4
+description = "CPU type"
+
+[regions.fields.enum_values]
+"7" = "x86"
+"12" = "ARM"
+"16777223" = "x86_64"
+"16777228" = "ARM64"
+
+[[regions.fields]]
+id = "cpu_subtype"
+label = "CPU Subtype"
+field_type = "u32_le"
+length = 4
+description = "CPU subtype"
+
+[[regions.fields]]
+id = "file_type"
+label = "File Type"
+field_type = "u32_le"
+length = 4
+description = "Mach-O file type"
+
+[regions.fields.enum_values]
+"1" = "Object (MH_OBJECT)"
+"2" = "Executable (MH_EXECUTE)"
+"3" = "Fixed VM Shared Lib"
+"4" = "Core Dump"
+"5" = "Preloaded"
+"6" = "Dylib (MH_DYLIB)"
+"7" = "Dynamic Linker (MH_DYLINKER)"
+"8" = "Bundle (MH_BUNDLE)"
+"9" = "Dylib Stub"
+"10" = "Debug Symbols (MH_DSYM)"
+"11" = "Kext (MH_KEXT_BUNDLE)"
+
+[[regions.fields]]
+id = "ncmds"
+label = "Number of Load Commands"
+field_type = "u32_le"
+length = 4
+role = "count"
+description = "Number of load commands"
+
+[[regions.fields]]
+id = "sizeofcmds"
+label = "Size of Load Commands"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of all load commands in bytes"
+
+[[regions.fields]]
+id = "flags"
+label = "Flags"
+field_type = "u32_le"
+length = 4
+description = "Mach-O flags"
+
+[regions.fields.bit_flags]
+"0" = "MH_NOUNDEFS"
+"1" = "MH_INCRLINK"
+"2" = "MH_DYLDLINK"
+"3" = "MH_BINDATLOAD"
+"4" = "MH_PREBOUND"
+"5" = "MH_SPLIT_SEGS"
+"7" = "MH_TWOLEVEL"
+"12" = "MH_PIE"
+
+[[regions.fields]]
+id = "reserved"
+label = "Reserved"
+field_type = "u32_le"
+length = 4
+role = "reserved"
+description = "Reserved (must be 0)"
+
+[[regions]]
+id = "first_load_command"
+label = "First Load Command"
+color = "#3498DB"
+offset = 32
+length = 8
+group = "load_commands"
+description = "First load command header (cmd + cmdsize)"
+
+[[regions.fields]]
+id = "cmd"
+label = "Command Type"
+field_type = "u32_le"
+length = 4
+description = "Load command type"
+
+[regions.fields.enum_values]
+"1" = "LC_SEGMENT"
+"2" = "LC_SYMTAB"
+"11" = "LC_DYSYMTAB"
+"12" = "LC_LOAD_DYLIB"
+"14" = "LC_LOAD_DYLINKER"
+"25" = "LC_SEGMENT_64"
+"27" = "LC_UUID"
+"28" = "LC_RPATH"
+"34" = "LC_SOURCE_VERSION"
+"36" = "LC_MAIN"
+"2147483688" = "LC_DYLD_INFO_ONLY"
+
+[[regions.fields]]
+id = "cmdsize"
+label = "Command Size"
+field_type = "u32_le"
+length = 4
+role = "size"
+description = "Size of this load command including data"

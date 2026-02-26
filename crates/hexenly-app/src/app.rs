@@ -167,6 +167,11 @@ impl HexenlyApp {
         );
         registry.load_builtin(
             "filesystems",
+            "FAT16",
+            include_str!("../../../templates/filesystems/fat16.toml"),
+        );
+        registry.load_builtin(
+            "filesystems",
             "Cybiko CFS",
             include_str!("../../../templates/filesystems/cybiko-cfs.toml"),
         );
@@ -209,6 +214,81 @@ impl HexenlyApp {
             "archives",
             "GZIP",
             include_str!("../../../templates/archives/gzip.toml"),
+        );
+        registry.load_builtin(
+            "images",
+            "TIFF",
+            include_str!("../../../templates/images/tiff.toml"),
+        );
+        registry.load_builtin(
+            "images",
+            "ICO",
+            include_str!("../../../templates/images/ico.toml"),
+        );
+        registry.load_builtin(
+            "images",
+            "WebP",
+            include_str!("../../../templates/images/webp.toml"),
+        );
+        registry.load_builtin(
+            "media",
+            "MP3",
+            include_str!("../../../templates/media/mp3.toml"),
+        );
+        registry.load_builtin(
+            "media",
+            "FLAC",
+            include_str!("../../../templates/media/flac.toml"),
+        );
+        registry.load_builtin(
+            "media",
+            "OGG",
+            include_str!("../../../templates/media/ogg.toml"),
+        );
+        registry.load_builtin(
+            "executables",
+            "Mach-O",
+            include_str!("../../../templates/executables/macho.toml"),
+        );
+        registry.load_builtin(
+            "executables",
+            "Java Class",
+            include_str!("../../../templates/executables/java-class.toml"),
+        );
+        registry.load_builtin(
+            "executables",
+            "WebAssembly",
+            include_str!("../../../templates/executables/wasm.toml"),
+        );
+        registry.load_builtin(
+            "documents",
+            "PDF",
+            include_str!("../../../templates/documents/pdf.toml"),
+        );
+        registry.load_builtin(
+            "databases",
+            "SQLite",
+            include_str!("../../../templates/databases/sqlite.toml"),
+        );
+        registry.load_builtin(
+            "archives",
+            "7z",
+            include_str!("../../../templates/archives/7z.toml"),
+        );
+        registry.load_builtin(
+            "archives",
+            "XZ",
+            include_str!("../../../templates/archives/xz.toml"),
+        );
+        registry.load_builtin(
+            "networking",
+            "PCAP",
+            include_str!("../../../templates/networking/pcap.toml"),
+        );
+        registry.load_builtin(
+            "fonts",
+            "TrueType/OpenType",
+            include_str!("../../../templates/fonts/ttf.toml"),
         );
 
         let mut notifications = Vec::new();

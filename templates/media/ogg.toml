@@ -1,0 +1,153 @@
+name = "OGG"
+description = "OGG container format (Vorbis/Opus audio)"
+extensions = ["ogg", "oga", "ogv"]
+magic = "4F676753"
+magic_offset = 0
+endian = "little"
+
+[[regions]]
+id = "ogg_page_header"
+label = "OGG Page Header"
+color = "#E74C3C"
+offset = 0
+length = 27
+group = "header"
+description = "OGG page header with stream identification and page metadata"
+
+[[regions.fields]]
+id = "capture_pattern"
+label = "Capture Pattern"
+field_type = "ascii"
+length = 4
+role = "magic"
+description = "OggS"
+
+[[regions.fields]]
+id = "stream_version"
+label = "Stream Version"
+field_type = "u8"
+length = 1
+role = "version"
+description = "Stream structure version (always 0)"
+
+[[regions.fields]]
+id = "header_type"
+label = "Header Type"
+field_type = "u8"
+length = 1
+description = "Page type flags"
+
+[regions.fields.bit_flags]
+"0" = "Continuation"
+"1" = "Beginning of Stream"
+"2" = "End of Stream"
+
+[[regions.fields]]
+id = "granule_position"
+label = "Granule Position"
+field_type = "u64_le"
+length = 8
+description = "Position in stream (codec-specific meaning)"
+
+[[regions.fields]]
+id = "serial_number"
+label = "Serial Number"
+field_type = "u32_le"
+length = 4
+description = "Stream serial number (unique per logical stream)"
+
+[[regions.fields]]
+id = "page_sequence"
+label = "Page Sequence"
+field_type = "u32_le"
+length = 4
+role = "count"
+description = "Page sequence number (incrementing per stream)"
+
+[[regions.fields]]
+id = "checksum"
+label = "Checksum"
+field_type = "u32_le"
+length = 4
+role = "checksum"
+description = "CRC-32 checksum of entire page"
+
+[[regions.fields]]
+id = "segment_count"
+label = "Segment Count"
+field_type = "u8"
+length = 1
+role = "count"
+description = "Number of segment entries in segment table"
+
+[[regions]]
+id = "vorbis_identification"
+label = "Vorbis Identification"
+color = "#3498DB"
+offset = 28
+length = 23
+group = "vorbis"
+description = "Vorbis identification header with codec parameters (assumes 1-segment first page)"
+
+[[regions.fields]]
+id = "packet_type"
+label = "Packet Type"
+field_type = "u8"
+length = 1
+description = "Vorbis packet type (1=identification, 3=comment, 5=setup)"
+
+[regions.fields.enum_values]
+"1" = "Identification"
+"3" = "Comment"
+"5" = "Setup"
+
+[[regions.fields]]
+id = "vorbis_magic"
+label = "Vorbis Magic"
+field_type = "ascii"
+length = 6
+role = "magic"
+description = "vorbis"
+
+[[regions.fields]]
+id = "vorbis_version"
+label = "Vorbis Version"
+field_type = "u32_le"
+length = 4
+role = "version"
+description = "Vorbis version (must be 0)"
+
+[[regions.fields]]
+id = "audio_channels"
+label = "Audio Channels"
+field_type = "u8"
+length = 1
+description = "Number of audio channels"
+
+[[regions.fields]]
+id = "sample_rate"
+label = "Sample Rate"
+field_type = "u32_le"
+length = 4
+description = "Audio sample rate in Hz"
+
+[[regions.fields]]
+id = "bitrate_max"
+label = "Bitrate Maximum"
+field_type = "u32_le"
+length = 4
+description = "Maximum bitrate (0 = unset)"
+
+[[regions.fields]]
+id = "bitrate_nominal"
+label = "Bitrate Nominal"
+field_type = "u32_le"
+length = 4
+description = "Nominal bitrate (0 = unset)"
+
+[[regions.fields]]
+id = "bitrate_min"
+label = "Bitrate Minimum"
+field_type = "u32_le"
+length = 4
+description = "Minimum bitrate (0 = unset)"
