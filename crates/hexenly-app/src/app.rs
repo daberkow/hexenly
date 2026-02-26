@@ -504,11 +504,11 @@ impl HexenlyApp {
 
         let mut i = 0;
         while i < self.template_layers.len() {
-            if let LayerSource::LinkedFrom(ref src) = self.template_layers[i].source {
-                if field_ids.contains(src) {
-                    self.remove_template_layer(i);
-                    continue;
-                }
+            if let LayerSource::LinkedFrom(ref src) = self.template_layers[i].source
+                && field_ids.contains(src)
+            {
+                self.remove_template_layer(i);
+                continue;
             }
             i += 1;
         }
