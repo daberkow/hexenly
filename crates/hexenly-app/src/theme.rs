@@ -95,6 +95,12 @@ pub fn apply_theme(ctx: &egui::Context, mode: ThemeMode) {
             style.visuals.window_fill = Color32::from_rgb(245, 245, 248);
             style.visuals.panel_fill = Color32::from_rgb(245, 245, 248);
             style.visuals.extreme_bg_color = Color32::from_rgb(232, 232, 236);
+            // Darken text so it's clearly readable on the light background
+            style.visuals.override_text_color = Some(Color32::from_rgb(30, 30, 30));
+            style.visuals.widgets.noninteractive.fg_stroke.color = Color32::from_rgb(40, 40, 40);
+            style.visuals.widgets.inactive.fg_stroke.color = Color32::from_rgb(40, 40, 40);
+            style.visuals.widgets.hovered.fg_stroke.color = Color32::from_rgb(20, 20, 20);
+            style.visuals.widgets.active.fg_stroke.color = Color32::from_rgb(10, 10, 10);
         }
     }
     style.visuals.window_corner_radius = egui::CornerRadius::same(2);

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use eframe::App;
-use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TopBottomPanel};
+use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TextureHandle, TopBottomPanel};
 use hexenly_core::{Bookmark, EditBuffer, EditMode, HexFile, SearchPattern, Selection, find_all};
 use hexenly_templates::engine;
 use hexenly_templates::loader::TemplateRegistry;
@@ -153,6 +153,9 @@ pub struct HexenlyApp {
 
     /// When true, the next close request will not be cancelled (force quit).
     force_closing: bool,
+
+    /// Cached logo texture for the welcome screen.
+    logo_texture: Option<TextureHandle>,
 }
 
 impl HexenlyApp {
@@ -362,6 +365,7 @@ impl HexenlyApp {
             nibble_high: true,
             edit_focus: HexPane::Hex,
             force_closing: false,
+            logo_texture: None,
         }
     }
 
@@ -1805,6 +1809,148 @@ impl HexenlyApp {
             buf.toggle_mode();
         }
     }
+    fn show_welcome_screen(&mut self, ui: &mut egui::Ui) {
+        let available = ui.available_size();
+        ui.scope_builder(
+            egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(ui.min_rect().min, available)),
+            |ui| {
+                ui.vertical_centered(|ui| {
+                    // Vertical centering: add flexible space above
+                    let spacing = (available.y * 0.2).max(20.0);
+                    ui.add_space(spacing);
+
+                    // --- Logo ---
+                    let texture = self.logo_texture.get_or_insert_with(|| {
+                        let png_bytes = include_bytes!("../../../docs/logo256.png");
+                        let img = image::load_from_memory(png_bytes)
+                            .expect("Failed to decode logo PNG");
+                        let rgba = img.to_rgba8();
+                        let size = [rgba.width() as usize, rgba.height() as usize];
+                        let color_image =
+                            egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                        ui.ctx()
+                            .load_texture("hexenly-logo", color_image, egui::TextureOptions::LINEAR)
+                    });
+                    let logo_height = 160.0;
+                    let aspect = texture.aspect_ratio();
+                    let logo_size = egui::vec2(logo_height * aspect, logo_height);
+                    ui.image(egui::load::SizedTexture::new(texture.id(), logo_size));
+                    ui.add_space(12.0);
+
+                    // --- Subtitle ---
+                    ui.label(
+                        RichText::new("Drop a file or press Ctrl+O to open")
+                            .size(16.0)
+                            .color(ui.visuals().text_color()),
+                    );
+
+                    // --- Recent Files ---
+                    // Filter to files that still exist and take up to 6
+                    let existing: Vec<PathBuf> = self
+                        .recent_files
+                        .iter()
+                        .filter(|p| p.exists())
+                        .take(6)
+                        .cloned()
+                        .collect();
+
+                    if !existing.is_empty() {
+                        ui.add_space(24.0);
+                        ui.label(
+                            RichText::new("Recent Files")
+                                .size(14.0)
+                                .color(ui.visuals().text_color()),
+                        );
+                        ui.add_space(8.0);
+
+                        let mut open_path: Option<PathBuf> = None;
+
+                        // 2-column grid of cards
+                        let card_width = 180.0;
+                        let card_spacing = 8.0;
+                        let grid_width = card_width * 2.0 + card_spacing;
+
+                        ui.allocate_ui(egui::vec2(grid_width, 0.0), |ui| {
+                            egui::Grid::new("recent_files_grid")
+                                .num_columns(2)
+                                .spacing([card_spacing, card_spacing])
+                                .show(ui, |ui| {
+                                    for (i, path) in existing.iter().enumerate() {
+                                        let filename = path
+                                            .file_name()
+                                            .map(|n| n.to_string_lossy().to_string())
+                                            .unwrap_or_else(|| "???".into());
+
+                                        let size_str = std::fs::metadata(path)
+                                            .map(|m| format_size(m.len() as usize))
+                                            .unwrap_or_default();
+
+                                        let (rect, response) = ui.allocate_exact_size(
+                                            egui::vec2(card_width, 48.0),
+                                            egui::Sense::click(),
+                                        );
+
+                                        // Card background
+                                        let hovered = response.hovered();
+                                        let bg = if hovered {
+                                            ui.visuals().widgets.hovered.bg_fill
+                                        } else {
+                                            ui.visuals().widgets.noninteractive.bg_fill
+                                        };
+                                        let stroke = if hovered {
+                                            ui.visuals().widgets.hovered.bg_stroke
+                                        } else {
+                                            egui::Stroke::new(
+                                                1.0,
+                                                ui.visuals().widgets.noninteractive.bg_stroke.color,
+                                            )
+                                        };
+                                        ui.painter().rect(rect, 4.0, bg, stroke, egui::StrokeKind::Inside);
+
+                                        // Card text
+                                        let text_rect = rect.shrink(8.0);
+                                        ui.painter().text(
+                                            text_rect.left_top(),
+                                            egui::Align2::LEFT_TOP,
+                                            &filename,
+                                            egui::FontId::proportional(13.0),
+                                            ui.visuals().text_color(),
+                                        );
+                                        ui.painter().text(
+                                            egui::Pos2::new(
+                                                text_rect.left(),
+                                                text_rect.top() + 18.0,
+                                            ),
+                                            egui::Align2::LEFT_TOP,
+                                            &size_str,
+                                            egui::FontId::proportional(11.0),
+                                            ui.visuals().weak_text_color(),
+                                        );
+
+                                        // Tooltip with full path
+                                        let clicked = response.clicked();
+                                        response.on_hover_text(path.display().to_string());
+
+                                        if clicked {
+                                            open_path = Some(path.clone());
+                                        }
+
+                                        // New row every 2 cards
+                                        if i % 2 == 1 {
+                                            ui.end_row();
+                                        }
+                                    }
+                                });
+                        });
+
+                        if let Some(path) = open_path {
+                            self.open_path(&path);
+                        }
+                    }
+                });
+            },
+        );
+    }
 }
 
 impl App for HexenlyApp {
@@ -2084,9 +2230,7 @@ impl App for HexenlyApp {
                     _ => {}
                 }
             } else {
-                ui.centered_and_justified(|ui| {
-                    ui.heading("Drop a file or press Ctrl+O to open");
-                });
+                self.show_welcome_screen(ui);
             }
         });
 
