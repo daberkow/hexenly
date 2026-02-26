@@ -1760,15 +1760,15 @@ impl App for HexenlyApp {
 
         // Structure panel (above status bar)
         if self.panels.structure
-            && let Some(layer) = self.template_layers.first()
+            && !self.template_layers.is_empty()
         {
-            let resolved_clone = layer.resolved.clone();
+            let layers_clone = self.template_layers.clone();
             let cursor = self.cursor_offset;
             TopBottomPanel::bottom("structure")
                 .default_height(200.0)
                 .resizable(true)
                 .show(ctx, |ui| {
-                    let action = structure::show(ui, &resolved_clone, cursor);
+                    let action = structure::show(ui, &layers_clone, cursor);
                     match action {
                         Some(StructureAction::GoToOffset(off)) => {
                             self.cursor_offset = off;
@@ -1918,6 +1918,7 @@ impl App for HexenlyApp {
             };
             let data_len = data.map(|d| d.len()).unwrap_or(0);
             if let Some(data) = data {
+                let overlays: Vec<&ResolvedTemplate> = self.template_layers.iter().map(|l| &l.resolved).collect();
                 let action = hex_view::show(
                     ui,
                     data,
@@ -1928,7 +1929,7 @@ impl App for HexenlyApp {
                     &self.search.matches,
                     self.panels.ascii_pane,
                     &mut self.hex_view_state,
-                    self.template_layers.first().map(|l| &l.resolved),
+                    &overlays,
                     self.nibble_high,
                     self.edit_focus,
                     &self.hex_colors,

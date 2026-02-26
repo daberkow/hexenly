@@ -29,7 +29,7 @@ pub fn show(
     search_matches: &[usize],
     show_ascii: bool,
     state: &mut HexViewState,
-    template_overlay: Option<&ResolvedTemplate>,
+    template_overlay: &[&ResolvedTemplate],
     nibble_high: bool,
     edit_focus: HexPane,
     colors: &HexColors,
@@ -106,29 +106,36 @@ pub fn show(
                     );
 
                     // --- Template overlay background (painted first, lowest layer) ---
-                    if let Some(tmpl) = template_overlay {
-                        for region in &tmpl.regions {
-                            if region.contains(byte_offset as u64) {
-                                // Use field color if the byte falls in a field with a color,
-                                // otherwise fall back to region color.
-                                let c = region.fields.iter()
-                                    .find(|f| byte_offset as u64 >= f.offset && (byte_offset as u64) < f.offset + f.length)
-                                    .and_then(|f| f.color.as_ref())
-                                    .unwrap_or(&region.color);
-                                let bg = Color32::from_rgba_unmultiplied(c.r, c.g, c.b, 38);
-                                painter.rect_filled(hex_rect, 0.0, bg);
+                    // Last layer wins for overlapping regions.
+                    if !template_overlay.is_empty() {
+                        let mut bg_color = None;
 
-                                if show_ascii {
-                                    let ascii_rect = Rect::from_min_size(
-                                        Pos2::new(
-                                            ascii_x_start + col as f32 * char_width,
-                                            y,
-                                        ),
-                                        Vec2::new(char_width, line_height),
-                                    );
-                                    painter.rect_filled(ascii_rect, 0.0, bg);
+                        for overlay in template_overlay {
+                            for region in &overlay.regions {
+                                if region.contains(byte_offset as u64) {
+                                    // Use field color if the byte falls in a field with a color,
+                                    // otherwise fall back to region color.
+                                    let c = region.fields.iter()
+                                        .find(|f| byte_offset as u64 >= f.offset && (byte_offset as u64) < f.offset + f.length)
+                                        .and_then(|f| f.color.as_ref())
+                                        .unwrap_or(&region.color);
+                                    bg_color = Some(Color32::from_rgba_unmultiplied(c.r, c.g, c.b, 38));
                                 }
-                                break;
+                            }
+                        }
+
+                        if let Some(bg) = bg_color {
+                            painter.rect_filled(hex_rect, 0.0, bg);
+
+                            if show_ascii {
+                                let ascii_rect = Rect::from_min_size(
+                                    Pos2::new(
+                                        ascii_x_start + col as f32 * char_width,
+                                        y,
+                                    ),
+                                    Vec2::new(char_width, line_height),
+                                );
+                                painter.rect_filled(ascii_rect, 0.0, bg);
                             }
                         }
                     }
@@ -203,25 +210,27 @@ pub fn show(
                 }
 
                 // --- Region labels above first byte of regions starting in this row ---
-                if let Some(tmpl) = template_overlay {
+                if !template_overlay.is_empty() {
                     let ann_font = annotation_font();
-                    for region in &tmpl.regions {
-                        let region_start = region.offset as usize;
-                        if region_start >= row_offset
-                            && region_start < row_offset + columns
-                        {
-                            let col_in_row = region_start - row_offset;
-                            let label_x = hex_x_start + col_in_row as f32 * hex_col_width;
-                            let label_y = y - 1.0;
-                            let label_color =
-                                Color32::from_rgb(region.color.r, region.color.g, region.color.b);
-                            painter.text(
-                                Pos2::new(label_x, label_y),
-                                egui::Align2::LEFT_BOTTOM,
-                                &region.label,
-                                ann_font.clone(),
-                                label_color,
-                            );
+                    for overlay in template_overlay {
+                        for region in &overlay.regions {
+                            let region_start = region.offset as usize;
+                            if region_start >= row_offset
+                                && region_start < row_offset + columns
+                            {
+                                let col_in_row = region_start - row_offset;
+                                let label_x = hex_x_start + col_in_row as f32 * hex_col_width;
+                                let label_y = y - 1.0;
+                                let label_color =
+                                    Color32::from_rgb(region.color.r, region.color.g, region.color.b);
+                                painter.text(
+                                    Pos2::new(label_x, label_y),
+                                    egui::Align2::LEFT_BOTTOM,
+                                    &region.label,
+                                    ann_font.clone(),
+                                    label_color,
+                                );
+                            }
                         }
                     }
                 }
