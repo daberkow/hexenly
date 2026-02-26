@@ -1,11 +1,17 @@
+/// Classification of a byte for color-coding in the hex view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ByteClass {
+    /// 0x00
     Null,
+    /// 0xFF
     MaxByte,
+    /// 0x20..=0x7E
     PrintableAscii,
+    /// Everything else.
     Other,
 }
 
+/// Classify a byte for color-coding in the hex view.
 pub fn classify_byte(b: u8) -> ByteClass {
     match b {
         0x00 => ByteClass::Null,
@@ -15,6 +21,9 @@ pub fn classify_byte(b: u8) -> ByteClass {
     }
 }
 
+/// All possible interpretations of the bytes at a given offset.
+///
+/// Fields are `None` when there aren't enough bytes remaining for that type.
 #[derive(Debug, Clone)]
 pub struct Interpretation {
     pub byte: u8,
@@ -59,9 +68,12 @@ pub struct Interpretation {
     pub utf16_be_char: Option<String>,
 }
 
+/// Stateless helper that builds an [`Interpretation`] from a byte slice and offset.
 pub struct ByteInterpreter;
 
 impl ByteInterpreter {
+    /// Interpret the bytes at `offset` as every supported type.
+    /// Returns `None` if `offset` is out of range.
     pub fn interpret(data: &[u8], offset: usize) -> Option<Interpretation> {
         let byte = *data.get(offset)?;
         let remaining = &data[offset..];
@@ -154,6 +166,7 @@ impl ByteInterpreter {
     }
 }
 
+/// Try to read exactly `N` bytes from the front of `data`.
 fn try_read<const N: usize>(data: &[u8]) -> Option<[u8; N]> {
     if data.len() < N {
         return None;

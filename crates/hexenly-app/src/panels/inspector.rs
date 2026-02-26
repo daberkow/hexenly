@@ -1,8 +1,11 @@
+//! Byte inspector panel — shows every interpretation of the bytes at the cursor.
+
 use egui::{self, Grid, RichText, ScrollArea, Ui};
 use hexenly_core::ByteInterpreter;
 
 use crate::theme::{HexColors, monospace_font};
 
+/// Render the inspector panel. Returns `true` if the user clicked the close button.
 pub fn show(ui: &mut Ui, data: &[u8], cursor: usize, colors: &HexColors) -> bool {
     let mut close = false;
     ui.horizontal(|ui| {

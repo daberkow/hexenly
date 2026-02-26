@@ -1,3 +1,5 @@
+//! Main application struct and eframe integration.
+
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -15,6 +17,7 @@ use crate::panels::structure::{self, StructureAction};
 use crate::panels::templates::{self, TemplateBrowserAction};
 use crate::theme::{HexColors, ThemeMode};
 
+/// Text encoding used when typing in the ASCII pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextEncoding {
     Ascii,
@@ -40,6 +43,7 @@ const PAGE_SCROLL_ROWS: usize = 16;
 const MAX_SEARCH_RESULTS: usize = 10_000;
 const MAX_RECENT_FILES: usize = 10;
 
+/// Tracks which optional panels are currently visible.
 struct PanelVisibility {
     inspector: bool,
     ascii_pane: bool,
@@ -82,6 +86,7 @@ struct GotoState {
     input: String,
 }
 
+/// Top-level application state, implementing [`eframe::App`].
 pub struct HexenlyApp {
     file: Option<HexFile>,
     edit_buffer: Option<EditBuffer>,

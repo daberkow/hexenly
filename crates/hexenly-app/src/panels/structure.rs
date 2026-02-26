@@ -1,14 +1,18 @@
+//! Structure tree panel — shows resolved template regions and fields with navigation.
+
 use egui::{self, Color32, Grid, RichText, ScrollArea, Ui};
 use hexenly_templates::resolved::ResolvedTemplate;
 
 use crate::theme::monospace_font;
 
+/// An interaction returned from the structure panel.
 #[derive(Debug)]
 pub enum StructureAction {
     GoToOffset(usize),
     Close,
 }
 
+/// Render the structure panel. Returns an action if the user navigated or closed.
 pub fn show(
     ui: &mut Ui,
     resolved: &ResolvedTemplate,

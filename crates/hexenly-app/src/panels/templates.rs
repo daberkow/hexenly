@@ -1,6 +1,9 @@
+//! Template browser panel — browse, filter, and select binary templates.
+
 use egui::{self, RichText, ScrollArea, Ui};
 use hexenly_templates::loader::TemplateRegistry;
 
+/// An interaction returned from the template browser.
 #[derive(Debug)]
 pub enum TemplateBrowserAction {
     Select(usize),
@@ -8,6 +11,7 @@ pub enum TemplateBrowserAction {
     Close,
 }
 
+/// Render the template browser. Returns an action if the user selected or deselected a template.
 pub fn show(
     ui: &mut Ui,
     registry: &TemplateRegistry,

@@ -1,7 +1,10 @@
+//! TOML parsing and basic validation for template files.
+
 use std::path::Path;
 
 use crate::schema::Template;
 
+/// Errors that can occur when parsing a template file.
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     #[error("I/O error: {0}")]

@@ -1,3 +1,7 @@
+//! Hexenly — a hex editor with structured binary template support.
+//!
+//! Run with `cargo run -p hexenly-app` or `cargo run -p hexenly-app -- path/to/file.bin`.
+
 mod app;
 mod panels;
 mod theme;

@@ -1,11 +1,15 @@
+//! Color theme and font configuration for the hex view.
+
 use egui::{Color32, FontFamily, FontId, Style, TextStyle, Visuals};
 
+/// Dark or light theme selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeMode {
     Dark,
     Light,
 }
 
+/// Per-element colors used by the hex view painter.
 pub struct HexColors {
     pub null_byte: Color32,
     pub max_byte: Color32,
@@ -61,14 +65,17 @@ impl HexColors {
     }
 }
 
+/// The monospace font used throughout the hex view and inspector.
 pub fn monospace_font() -> FontId {
     FontId::new(14.0, FontFamily::Monospace)
 }
 
+/// Small proportional font used for region labels in the hex view.
 pub fn annotation_font() -> FontId {
     FontId::new(9.0, FontFamily::Proportional)
 }
 
+/// Apply the selected theme to the egui context (colors, fonts, spacing).
 pub fn apply_theme(ctx: &egui::Context, mode: ThemeMode) {
     let mut style = Style {
         visuals: match mode {

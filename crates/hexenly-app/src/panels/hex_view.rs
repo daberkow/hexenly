@@ -1,9 +1,13 @@
+//! Painter-based hex grid with offset gutter, hex bytes, ASCII pane,
+//! template overlay, selection, and cursor rendering.
+
 use egui::{Color32, Pos2, Rect, ScrollArea, Sense, Stroke, StrokeKind, Ui, Vec2};
 use hexenly_core::{ByteClass, Selection, classify_byte};
 use hexenly_templates::resolved::ResolvedTemplate;
 
 use crate::theme::{HexColors, annotation_font, monospace_font};
 
+/// Persistent state for the hex view across frames.
 #[derive(Default)]
 pub struct HexViewState {
     /// Scroll to this row on next frame, then clear.
@@ -12,6 +16,8 @@ pub struct HexViewState {
     drag_start: Option<(usize, HexPane)>,
 }
 
+/// Render the hex view for the current frame. Returns an action if the user
+/// clicked or dragged to set the cursor or select a range.
 #[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut Ui,
@@ -317,6 +323,7 @@ fn pos_to_offset(
     None
 }
 
+/// Map a byte to its display color based on its classification.
 fn byte_color(byte: u8, colors: &HexColors) -> Color32 {
     match classify_byte(byte) {
         ByteClass::Null => colors.null_byte,
@@ -326,12 +333,14 @@ fn byte_color(byte: u8, colors: &HexColors) -> Color32 {
     }
 }
 
+/// Which sub-pane of the hex view: the hex byte grid or the ASCII column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HexPane {
     Hex,
     Ascii,
 }
 
+/// An interaction returned from the hex view to the main app loop.
 #[derive(Debug)]
 pub enum HexViewAction {
     SetCursor(usize, HexPane),

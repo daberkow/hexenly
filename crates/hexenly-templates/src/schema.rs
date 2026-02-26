@@ -1,7 +1,13 @@
+//! TOML-backed schema types for binary file templates.
+//!
+//! Key types: [`Template`], [`Region`], [`Field`], and the expression enums
+//! ([`OffsetExpr`], [`LengthExpr`]) with custom serde deserialization.
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+/// Top-level template describing a binary file format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Template {
     pub name: String,
@@ -18,6 +24,7 @@ pub struct Template {
     pub regions: Vec<Region>,
 }
 
+/// A contiguous region of bytes in the file (e.g., "PNG Header", "IHDR Chunk").
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Region {
     pub id: String,
@@ -46,11 +53,15 @@ pub struct Region {
     pub repeat_until: Option<String>,
 }
 
+/// How a region should be repeated when resolving.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RepeatMode {
+    /// Repeat a fixed number of times (requires `repeat_count` field reference).
     Count,
+    /// Repeat until the end of the file.
     UntilEof,
+    /// Repeat until a sentinel byte sequence is found (requires `repeat_until`).
     UntilMagic,
 }
 
@@ -84,6 +95,7 @@ pub struct ConditionExpr {
     pub value: u64,
 }
 
+/// Comparison operators for condition expressions.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CompareOp {
     Eq,
@@ -94,6 +106,7 @@ pub enum CompareOp {
     Ge,
 }
 
+/// A single field within a region (e.g., "width: u32le").
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Field {
     pub id: String,
@@ -188,6 +201,7 @@ impl<'de> Deserialize<'de> for LengthExpr {
     }
 }
 
+/// Default byte order for the template. Individual fields can override this.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Endianness {
@@ -196,6 +210,7 @@ pub enum Endianness {
     Big,
 }
 
+/// Primitive data type of a field, used for both byte decoding and display formatting.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
@@ -237,6 +252,7 @@ impl FieldType {
     }
 }
 
+/// Semantic role of a field, used for display hints in the UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldRole {

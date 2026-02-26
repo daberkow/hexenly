@@ -1,6 +1,9 @@
+//! Bookmarks panel — add, edit, delete, and navigate named byte markers.
+
 use egui::{self, RichText, ScrollArea, Ui};
 use hexenly_core::Bookmark;
 
+/// An interaction returned from the bookmarks panel.
 #[derive(Debug)]
 pub enum BookmarkAction {
     Add,
@@ -10,6 +13,7 @@ pub enum BookmarkAction {
     Close,
 }
 
+/// Render the bookmarks panel. Returns an action if the user added, deleted, or navigated.
 pub fn show(
     ui: &mut Ui,
     bookmarks: &mut [Bookmark],

@@ -1,3 +1,9 @@
+//! Template resolution engine — resolves parsed templates against file bytes.
+//!
+//! Walks the template's regions and fields, evaluates dynamic expressions
+//! (field references, arithmetic, conditions, repeats), and produces a
+//! [`ResolvedTemplate`] with concrete absolute offsets and formatted display values.
+
 use std::collections::HashMap;
 
 use crate::resolved::{ResolvedField, ResolvedRegion, ResolvedTemplate, TemplateColor};
@@ -6,12 +12,14 @@ use crate::schema::{
     RepeatMode, Template,
 };
 
+/// The result of resolving a template: the resolved overlay plus any warnings.
 #[derive(Debug, Clone)]
 pub struct ResolveResult {
     pub template: ResolvedTemplate,
     pub warnings: Vec<ResolveWarning>,
 }
 
+/// A non-fatal issue encountered during resolution (e.g., out-of-bounds offset).
 #[derive(Debug, Clone)]
 pub struct ResolveWarning {
     pub message: String,

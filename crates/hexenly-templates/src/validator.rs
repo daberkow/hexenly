@@ -1,8 +1,14 @@
+//! Static validation for parsed templates.
+//!
+//! Checks for duplicate IDs, unknown references, forward references,
+//! circular dependencies, and inconsistent repeat/condition configurations.
+
 use std::collections::{HashMap, HashSet};
 
 use crate::resolved::TemplateColor;
 use crate::schema::{LengthExpr, OffsetExpr, Operand, RepeatMode, Template};
 
+/// A non-fatal validation issue (the template can still be loaded, but may not resolve correctly).
 #[derive(Debug, Clone)]
 pub struct ValidationWarning {
     pub message: String,
