@@ -6,16 +6,34 @@ use std::time::Instant;
 use eframe::App;
 use egui::{CentralPanel, Color32, Context, Key, Layout, RichText, SidePanel, TopBottomPanel};
 use hexenly_core::{Bookmark, EditBuffer, EditMode, HexFile, SearchPattern, Selection, find_all};
-use hexenly_templates::engine::{self, ResolveResult};
+use hexenly_templates::engine;
 use hexenly_templates::loader::TemplateRegistry;
 use hexenly_templates::resolved::ResolvedTemplate;
 
 use crate::panels::bookmarks::{self, BookmarkAction};
 use crate::panels::hex_view::{self, HexPane, HexViewAction, HexViewState};
 use crate::panels::inspector;
+use crate::panels::layers::{self, LayerAction};
 use crate::panels::structure::{self, StructureAction};
 use crate::panels::templates::{self, TemplateBrowserAction};
 use crate::theme::{HexColors, ThemeMode};
+
+/// How a template layer was added.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LayerSource {
+    AutoDetected,
+    Manual,
+    LinkedFrom(String),
+}
+
+/// A single active template overlay at a specific offset.
+#[derive(Debug, Clone)]
+pub struct TemplateLayer {
+    pub registry_index: usize,
+    pub base_offset: u64,
+    pub resolved: ResolvedTemplate,
+    pub source: LayerSource,
+}
 
 /// Text encoding used when typing in the ASCII pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,8 +131,8 @@ pub struct HexenlyApp {
 
     // Template state
     template_registry: TemplateRegistry,
-    active_template_index: Option<usize>,
-    resolved_template: Option<ResolvedTemplate>,
+    template_layers: Vec<TemplateLayer>,
+    template_apply_offset: String,
     template_filter: String,
     notifications: Vec<Notification>,
 
@@ -321,8 +339,8 @@ impl HexenlyApp {
             hex_colors: HexColors::dark(),
             pending_open: path,
             template_registry: registry,
-            active_template_index: None,
-            resolved_template: None,
+            template_layers: Vec::new(),
+            template_apply_offset: "0".to_string(),
             template_filter: String::new(),
             notifications,
             bookmarks: Vec::new(),
@@ -363,8 +381,7 @@ impl HexenlyApp {
                 self.nibble_high = true;
                 self.search.matches.clear();
                 self.search.match_idx = None;
-                self.active_template_index = None;
-                self.resolved_template = None;
+                self.template_layers.clear();
                 self.bookmarks = load_bookmarks(path);
 
                 // Track in recent files
@@ -399,6 +416,97 @@ impl HexenlyApp {
             .unwrap_or(0)
     }
 
+    fn add_template_layer(&mut self, registry_index: usize, base_offset: u64, source: LayerSource) {
+        // Prevent duplicates
+        if self.template_layers.iter().any(|l| l.registry_index == registry_index && l.base_offset == base_offset) {
+            return;
+        }
+
+        let entry = &self.template_registry.entries[registry_index];
+        let data = match &self.edit_buffer {
+            Some(buf) => buf.data(),
+            None => return,
+        };
+
+        if base_offset as usize >= data.len() {
+            return;
+        }
+
+        let slice = &data[base_offset as usize..];
+        let result = engine::resolve(&entry.template, slice);
+
+        // Adjust all offsets by base_offset
+        let adjusted_regions: Vec<_> = result.template.regions.into_iter().map(|mut r| {
+            r.offset += base_offset;
+            for f in &mut r.fields {
+                f.offset += base_offset;
+            }
+            r
+        }).collect();
+
+        let resolved = ResolvedTemplate {
+            name: result.template.name,
+            description: result.template.description,
+            regions: adjusted_regions,
+        };
+
+        for w in &result.warnings {
+            self.notifications.push(Notification {
+                message: format!("[{}] {}", entry.template.name, w.message),
+                level: NotificationLevel::Warning,
+                created: Instant::now(),
+            });
+        }
+
+        self.template_layers.push(TemplateLayer {
+            registry_index,
+            base_offset,
+            resolved,
+            source,
+        });
+
+        // Process template links (auto-chain)
+        for link in result.template_links {
+            if let Some(idx) = self.template_registry.entries.iter().position(|e| e.template.name == link.template_name) {
+                self.add_template_layer(idx, link.offset, LayerSource::LinkedFrom(link.source_field_id.clone()));
+            }
+        }
+    }
+
+    #[allow(dead_code)] // Will be used by template browser UI in a future task
+    fn remove_template_layer(&mut self, index: usize) {
+        if index >= self.template_layers.len() {
+            return;
+        }
+        let field_ids: Vec<String> = self.template_layers[index]
+            .resolved.regions.iter()
+            .flat_map(|r| r.fields.iter())
+            .map(|f| f.id.clone())
+            .collect();
+
+        self.template_layers.remove(index);
+
+        let mut i = 0;
+        while i < self.template_layers.len() {
+            if let LayerSource::LinkedFrom(ref src) = self.template_layers[i].source {
+                if field_ids.contains(src) {
+                    self.remove_template_layer(i);
+                    continue;
+                }
+            }
+            i += 1;
+        }
+    }
+
+    fn parse_apply_offset(&self) -> u64 {
+        let s = self.template_apply_offset.trim();
+        if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+            u64::from_str_radix(hex, 16).unwrap_or(0)
+        } else {
+            s.parse::<u64>().unwrap_or(0)
+        }
+    }
+
     fn auto_detect_template(&mut self, path: &std::path::Path) {
         let Some(bytes) = self.data_bytes() else { return };
 
@@ -411,8 +519,7 @@ impl HexenlyApp {
                 .iter()
                 .position(|e| std::ptr::eq(e, *entry));
             if let Some(idx) = idx {
-                self.active_template_index = Some(idx);
-                self.resolve_active_template();
+                self.add_template_layer(idx, 0, LayerSource::AutoDetected);
                 self.panels.structure = true;
                 return;
             }
@@ -428,8 +535,7 @@ impl HexenlyApp {
                     .iter()
                     .position(|e| std::ptr::eq(e, *entry));
                 if let Some(idx) = idx {
-                    self.active_template_index = Some(idx);
-                    self.resolve_active_template();
+                    self.add_template_layer(idx, 0, LayerSource::AutoDetected);
                     self.panels.structure = true;
                     return;
                 }
@@ -438,34 +544,6 @@ impl HexenlyApp {
 
         // No template matched — open the template browser so the user can pick one
         self.panels.template_browser = true;
-    }
-
-    fn resolve_active_template(&mut self) {
-        let Some(data) = self.data_bytes() else {
-            self.resolved_template = None;
-            return;
-        };
-        let Some(idx) = self.active_template_index else {
-            self.resolved_template = None;
-            return;
-        };
-        let Some(entry) = self.template_registry.entries.get(idx) else {
-            self.resolved_template = None;
-            return;
-        };
-
-        let result: ResolveResult = engine::resolve(&entry.template, data);
-
-        for warning in &result.warnings {
-            tracing::warn!("Template resolve: {warning}");
-            self.notifications.push(Notification {
-                message: format!("Template: {warning}"),
-                level: NotificationLevel::Warning,
-                created: Instant::now(),
-            });
-        }
-
-        self.resolved_template = Some(result.template);
     }
 
     fn do_search(&mut self) {
@@ -1585,8 +1663,8 @@ impl HexenlyApp {
                         }
                         ui.separator();
                     }
-                    if let Some(resolved) = &self.resolved_template {
-                        ui.label(&resolved.name);
+                    if let Some(layer) = self.template_layers.first() {
+                        ui.label(&layer.resolved.name);
                         ui.label(RichText::new("Template:").weak());
                         ui.separator();
                     }
@@ -1682,9 +1760,9 @@ impl App for HexenlyApp {
 
         // Structure panel (above status bar)
         if self.panels.structure
-            && let Some(resolved) = &self.resolved_template
+            && let Some(layer) = self.template_layers.first()
         {
-            let resolved_clone = resolved.clone();
+            let resolved_clone = layer.resolved.clone();
             let cursor = self.cursor_offset;
             TopBottomPanel::bottom("structure")
                 .default_height(200.0)
@@ -1709,26 +1787,43 @@ impl App for HexenlyApp {
             SidePanel::left("templates")
                 .default_width(200.0)
                 .show(ctx, |ui| {
+                    let active_indices: Vec<usize> = self.template_layers.iter().map(|l| l.registry_index).collect();
                     let action = templates::show(
                         ui,
                         &self.template_registry,
-                        self.active_template_index,
+                        &active_indices,
                         &mut self.template_filter,
+                        &mut self.template_apply_offset,
                     );
                     match action {
                         Some(TemplateBrowserAction::Select(idx)) => {
-                            self.active_template_index = Some(idx);
-                            self.resolve_active_template();
+                            self.add_template_layer(idx, self.parse_apply_offset(), LayerSource::Manual);
                             self.panels.structure = true;
                         }
                         Some(TemplateBrowserAction::Deselect) => {
-                            self.active_template_index = None;
-                            self.resolved_template = None;
+                            self.template_layers.clear();
                         }
                         Some(TemplateBrowserAction::Close) => {
                             self.panels.template_browser = false;
                         }
                         None => {}
+                    }
+
+                    // Active layers section
+                    if !self.template_layers.is_empty() {
+                        ui.separator();
+                        ui.label(RichText::new("Active Layers").strong());
+                        let layers_clone = self.template_layers.clone();
+                        if let Some(action) = layers::show(ui, &layers_clone) {
+                            match action {
+                                LayerAction::Remove(i) => {
+                                    self.remove_template_layer(i);
+                                }
+                                LayerAction::GoToOffset(off) => {
+                                    self.cursor_offset = off as usize;
+                                }
+                            }
+                        }
                     }
                 });
         }
@@ -1833,7 +1928,7 @@ impl App for HexenlyApp {
                     &self.search.matches,
                     self.panels.ascii_pane,
                     &mut self.hex_view_state,
-                    self.resolved_template.as_ref(),
+                    self.template_layers.first().map(|l| &l.resolved),
                     self.nibble_high,
                     self.edit_focus,
                     &self.hex_colors,

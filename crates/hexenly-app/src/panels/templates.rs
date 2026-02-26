@@ -15,8 +15,9 @@ pub enum TemplateBrowserAction {
 pub fn show(
     ui: &mut Ui,
     registry: &TemplateRegistry,
-    active_index: Option<usize>,
+    active_indices: &[usize],
     filter: &mut String,
+    apply_offset: &mut String,
 ) -> Option<TemplateBrowserAction> {
     let mut action = None;
 
@@ -34,6 +35,13 @@ pub fn show(
     ui.horizontal(|ui| {
         ui.label("Filter:");
         ui.text_edit_singleline(filter);
+    });
+    ui.add_space(4.0);
+
+    // Offset for new layers
+    ui.horizontal(|ui| {
+        ui.label("Apply at offset:");
+        ui.add(egui::TextEdit::singleline(apply_offset).desired_width(100.0).hint_text("0x0"));
     });
     ui.add_space(4.0);
 
@@ -67,7 +75,7 @@ pub fn show(
                     .default_open(true)
                     .show(ui, |ui| {
                         for &(idx, name) in entries {
-                            let is_active = active_index == Some(idx);
+                            let is_active = active_indices.contains(&idx);
                             let response = ui.selectable_label(is_active, name);
                             if response.clicked() {
                                 if is_active {
@@ -83,7 +91,7 @@ pub fn show(
 
     // Show selected template metadata
     ui.separator();
-    if let Some(idx) = active_index {
+    if let Some(&idx) = active_indices.first() {
         if let Some(entry) = registry.entries.get(idx) {
             let t = &entry.template;
             ui.label(RichText::new(&t.name).strong());
