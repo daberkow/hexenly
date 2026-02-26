@@ -440,14 +440,14 @@ pub fn resolve(template: &Template, file_bytes: &[u8]) -> ResolveResult {
                     field_map.insert(field.id.clone(), info);
 
                     // If apply_template is set and we have a value, push a TemplateLink
-                    if let Some(template_name) = &field.apply_template {
-                        if let Some(val) = computed_val {
-                            template_links.push(TemplateLink {
-                                template_name: template_name.clone(),
-                                offset: val,
-                                source_field_id: field.id.clone(),
-                            });
-                        }
+                    if let Some(template_name) = &field.apply_template
+                        && let Some(val) = computed_val
+                    {
+                        template_links.push(TemplateLink {
+                            template_name: template_name.clone(),
+                            offset: val,
+                            source_field_id: field.id.clone(),
+                        });
                     }
 
                     resolved_fields.push(ResolvedField {
