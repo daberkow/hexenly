@@ -156,6 +156,9 @@ pub struct HexenlyApp {
 
     /// Cached logo texture for the welcome screen.
     logo_texture: Option<TextureHandle>,
+
+    /// Whether the About window is open.
+    show_about: bool,
 }
 
 impl HexenlyApp {
@@ -366,6 +369,7 @@ impl HexenlyApp {
             edit_focus: HexPane::Hex,
             force_closing: false,
             logo_texture: None,
+            show_about: false,
         }
     }
 
@@ -1607,6 +1611,26 @@ impl HexenlyApp {
                     ui.close();
                 }
             });
+
+            ui.menu_button("Help", |ui| {
+                if ui.button("GitHub").clicked() {
+                    ui.close();
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(
+                        "https://github.com/daberkow/hexenly/",
+                    ));
+                }
+                if ui.button("Report Issue").clicked() {
+                    ui.close();
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(
+                        "https://github.com/daberkow/hexenly/issues",
+                    ));
+                }
+                ui.separator();
+                if ui.button("About Hexenly").clicked() {
+                    ui.close();
+                    self.show_about = true;
+                }
+            });
         });
     }
 
@@ -2003,6 +2027,62 @@ impl App for HexenlyApp {
         // Only process edit input when not in a text input mode
         if !self.panels.search && !self.panels.goto {
             self.handle_edit_input(ctx);
+        }
+
+        // About window
+        if self.show_about {
+            let mut open = true;
+            egui::Window::new("About Hexenly")
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        // Logo
+                        let texture = self.logo_texture.get_or_insert_with(|| {
+                            let png_bytes = include_bytes!("../../../docs/logo256.png");
+                            let img = image::load_from_memory(png_bytes)
+                                .expect("Failed to decode logo PNG");
+                            let rgba = img.to_rgba8();
+                            let size = [rgba.width() as usize, rgba.height() as usize];
+                            let color_image =
+                                egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                            ui.ctx().load_texture(
+                                "hexenly-logo",
+                                color_image,
+                                egui::TextureOptions::LINEAR,
+                            )
+                        });
+                        let logo_size = egui::vec2(96.0, 96.0 / texture.aspect_ratio());
+                        ui.image(egui::load::SizedTexture::new(texture.id(), logo_size));
+                        ui.add_space(8.0);
+
+                        ui.label(
+                            RichText::new("Hexenly")
+                                .size(20.0)
+                                .strong(),
+                        );
+                        ui.label(
+                            RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                                .size(14.0)
+                                .color(ui.visuals().weak_text_color()),
+                        );
+                        ui.add_space(4.0);
+                        ui.label("A hex editor with structured binary template support");
+                        ui.add_space(12.0);
+
+                        if ui.hyperlink_to("GitHub", "https://github.com/daberkow/hexenly/").clicked() {
+                            ui.close();
+                        }
+                        if ui.hyperlink_to("Report Issue", "https://github.com/daberkow/hexenly/issues").clicked() {
+                            ui.close();
+                        }
+                    });
+                });
+            if !open {
+                self.show_about = false;
+            }
         }
 
         // Top menu bar
