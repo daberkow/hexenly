@@ -394,6 +394,80 @@ pub fn resolve(template: &Template, file_bytes: &[u8]) -> ResolveResult {
                     }
                 }
 
+                // Handle computed fields — they don't read bytes, they evaluate an expression
+                if field.field_type == FieldType::Computed {
+                    let computed_val: Option<u64> = if let Some(expr_str) = &field.expression {
+                        if let Some(body) = expr_str.strip_prefix("expr:") {
+                            match crate::schema::parse_arith_expr_public(body) {
+                                Ok(expr) => eval_arith_expr(&expr, &field_map),
+                                Err(e) => {
+                                    warnings.push(ResolveWarning {
+                                        message: format!(
+                                            "field '{}': failed to parse expression '{}': {}",
+                                            field.id, expr_str, e
+                                        ),
+                                    });
+                                    None
+                                }
+                            }
+                        } else {
+                            // Simple field reference
+                            field_map.get(expr_str.as_str()).and_then(|info| info.numeric_value)
+                        }
+                    } else {
+                        None
+                    };
+
+                    let display_value = if let Some(val) = computed_val {
+                        format!("0x{:X} ({})", val, val)
+                    } else {
+                        "(unresolved)".to_string()
+                    };
+
+                    let field_iter_id = if let Some(n) = field_id_prefix {
+                        format!("{}.{}", field.id, n)
+                    } else {
+                        field.id.clone()
+                    };
+
+                    // Register in field_map with length 0
+                    let info = ResolvedFieldInfo {
+                        offset: field_cursor,
+                        length: 0,
+                        numeric_value: computed_val,
+                    };
+                    field_map.insert(field_iter_id.clone(), info.clone());
+                    field_map.insert(field.id.clone(), info);
+
+                    // If apply_template is set and we have a value, push a TemplateLink
+                    if let Some(template_name) = &field.apply_template {
+                        if let Some(val) = computed_val {
+                            template_links.push(TemplateLink {
+                                template_name: template_name.clone(),
+                                offset: val,
+                                source_field_id: field.id.clone(),
+                            });
+                        }
+                    }
+
+                    resolved_fields.push(ResolvedField {
+                        id: field_iter_id,
+                        label: field.label.clone(),
+                        field_type: field.field_type.clone(),
+                        offset: field_cursor,
+                        length: 0,
+                        role: field.role.clone(),
+                        description: field.description.clone(),
+                        raw_bytes: vec![],
+                        display_value,
+                        color: field.color.as_deref().and_then(TemplateColor::from_hex),
+                        computed_value: computed_val,
+                    });
+
+                    // Do NOT advance field_cursor — computed fields are zero-width
+                    continue;
+                }
+
                 // Apply explicit relative offset if present
                 let field_offset = if let Some(rel) = field.offset {
                     iter_offset + rel
@@ -1481,5 +1555,105 @@ mod tests {
 
         assert_eq!(result.template.regions[0].fields[0].length, 1);
         assert_eq!(result.template.regions[0].fields[0].raw_bytes, &[0xFE]);
+    }
+
+    #[test]
+    fn test_computed_field() {
+        let toml_str = r#"
+name = "Test"
+description = "Computed field test"
+extensions = []
+endian = "little"
+
+[[regions]]
+id = "header"
+label = "Header"
+offset = 0
+length = 8
+
+[[regions.fields]]
+id = "sector_count"
+label = "Sector Count"
+field_type = "u32_le"
+length = 4
+
+[[regions.fields]]
+id = "sector_size"
+label = "Sector Size"
+field_type = "u32_le"
+length = 4
+
+[[regions]]
+id = "computed_region"
+label = "Computed"
+offset = "after:header"
+length = 0
+
+[[regions.fields]]
+id = "total_bytes"
+label = "Total Bytes"
+field_type = "computed"
+length = 0
+expression = "expr:sector_count * sector_size"
+"#;
+        let template = crate::parser::parse_template_str(toml_str).unwrap();
+        let mut data = vec![0u8; 16];
+        data[0..4].copy_from_slice(&10u32.to_le_bytes());
+        data[4..8].copy_from_slice(&512u32.to_le_bytes());
+
+        let result = resolve(&template, &data);
+        assert!(result.warnings.is_empty(), "warnings: {:?}", result.warnings);
+
+        let computed_region = &result.template.regions[1];
+        assert_eq!(computed_region.fields.len(), 1);
+        let field = &computed_region.fields[0];
+        assert_eq!(field.id, "total_bytes");
+        assert_eq!(field.computed_value, Some(5120));
+        assert!(field.display_value.contains("5120"));
+    }
+
+    #[test]
+    fn test_computed_field_template_link() {
+        let toml_str = r#"
+name = "Test"
+description = "Template link test"
+extensions = []
+endian = "little"
+
+[[regions]]
+id = "header"
+label = "Header"
+offset = 0
+length = 4
+
+[[regions.fields]]
+id = "offset_val"
+label = "Offset"
+field_type = "u32_le"
+length = 4
+
+[[regions]]
+id = "links"
+label = "Links"
+offset = "after:header"
+length = 0
+
+[[regions.fields]]
+id = "target"
+label = "Target Offset"
+field_type = "computed"
+length = 0
+expression = "expr:offset_val * 512"
+apply_template = "FAT16"
+"#;
+        let template = crate::parser::parse_template_str(toml_str).unwrap();
+        let mut data = vec![0u8; 8];
+        data[0..4].copy_from_slice(&100u32.to_le_bytes());
+
+        let result = resolve(&template, &data);
+        assert_eq!(result.template_links.len(), 1);
+        assert_eq!(result.template_links[0].template_name, "FAT16");
+        assert_eq!(result.template_links[0].offset, 51200);
+        assert_eq!(result.template_links[0].source_field_id, "target");
     }
 }
