@@ -1952,6 +1952,10 @@ impl App for HexenlyApp {
                         self.edit_focus = pane;
                         self.nibble_high = true;
                     }
+                    Some(HexViewAction::ApplyTemplateAt(offset)) => {
+                        self.template_apply_offset = format!("0x{:X}", offset);
+                        self.panels.template_browser = true;
+                    }
                     _ => {}
                 }
             } else {

@@ -267,6 +267,16 @@ pub fn show(
             if response.drag_stopped() {
                 state.drag_start = None;
             }
+
+            // Right-click context menu
+            response.context_menu(|ui| {
+                ui.label(format!("Offset: 0x{:X}", cursor));
+                ui.separator();
+                if ui.button("Apply template here...").clicked() {
+                    action = Some(HexViewAction::ApplyTemplateAt(cursor as u64));
+                    ui.close();
+                }
+            });
         });
 
     if let Some(target_row) = scroll_to {
@@ -354,4 +364,5 @@ pub enum HexPane {
 pub enum HexViewAction {
     SetCursor(usize, HexPane),
     Select { start: usize, end: usize, pane: HexPane },
+    ApplyTemplateAt(u64),
 }
